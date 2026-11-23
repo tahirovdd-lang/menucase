@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Интерактивное меню блюд и напитков">
+<title>На столе · Интерактивное меню</title>
+<script>if (/^\/admin\/?$/.test(location.pathname)) document.documentElement.classList.add('admin-mode');</script>
+<link rel="stylesheet" href="/style.css">
+<header><a class="brand" href="/" aria-label="Ресторан The MOHON"><span class="brand-icon" aria-hidden="true"></span></a><div class="header-actions"><div class="language-picker"><img id="language-flag" alt="" width="20" height="15"><span id="language-code" aria-hidden="true">RU</span><select id="language" aria-label="Язык"></select></div><button id="account" class="quiet" hidden>Кабинет</button></div></header>
+<main>
+  <div class="top"><div class="menu-heading"><h1 id="restaurant">The MOHON</h1><p id="menu-title">Наше электронное меню</p></div><nav id="filters" aria-label="Разделы меню"></nav></div>
+  <nav id="subcategories" aria-label="Подкатегории блюд" hidden></nav>
+  <section class="stage" aria-label="Витрина меню">
+    <div id="rail" class="rail"></div>
+    <button class="step previous" id="previous" aria-label="Предыдущая позиция">‹</button>
+    <button class="step next" id="next" aria-label="Следующая позиция">›</button>
+  </section>
+  <section id="details" aria-live="polite"></section>
+</main>
+<section id="admin-page" class="admin-page" hidden>
+  <div class="admin-heading">
+    <div><p class="eyebrow">Кабинет администратора</p><h1 id="admin-title">Рестораны</h1></div>
+    <div id="admin-account" class="actions"></div>
+  </div>
+  <p id="status" role="status"></p>
+  <div id="controls"></div>
+</section>
+<script type="module" src="/app.js"></script>
+</html>

@@ -1,0 +1,4 @@
+dist/
+.env
+.menu-data/
+*.zip
