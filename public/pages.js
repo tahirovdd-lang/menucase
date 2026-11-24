@@ -12,6 +12,28 @@ if (slug) menuUrl.searchParams.set('restaurant',slug);
 const categories = {food:true,drinks:true,alcohol:true};
 const foodSections=Object.keys(sectionTranslations.ru);
 const selector = $('#language');
+const directoryEmptyMessages={
+  ru:"Рестораны пока не добавлены.",
+  uz:"Hozircha restoranlar qoʻshilmagan.",
+  en:"No restaurants have been added yet.",
+  it:"Non sono ancora stati aggiunti ristoranti.",
+  es:"Aún no se han añadido restaurantes.",
+  fr:"Aucun restaurant n’a encore été ajouté.",
+  de:"Es wurden noch keine Restaurants hinzugefügt.",
+  pt:"Ainda não foram adicionados restaurantes.",
+  tr:"Henüz restoran eklenmedi.",
+  kk:"Әзірге мейрамханалар қосылған жоқ.",
+  ky:"Азырынча ресторандар кошула элек.",
+  tg:"Ҳоло ягон тарабхона илова нашудааст.",
+  az:"Hələ restoran əlavə edilməyib.",
+  ar:"لم تُضَف أي مطاعم بعد.",
+  zh:"尚未添加餐厅。",
+  ja:"レストランはまだ登録されていません。",
+  ko:"아직 등록된 레스토랑이 없습니다.",
+  hi:"अभी तक कोई रेस्तराँ नहीं जोड़ा गया है।",
+  uk:"Ресторани ще не додано.",
+  pl:"Nie dodano jeszcze żadnych restauracji."
+};
 const languageKey = 'na-stole-language';
 let languageCode = 'ru';
 try {
@@ -371,7 +393,11 @@ function applyLanguage() {
   $('#language-code').textContent=languageCode.toUpperCase();
   $('#language-flag').src=flags[regionFor(languageCode)];
   selector.setAttribute('aria-label',t('language'));
-  if (slug===null) return;
+  if (slug===null) {
+    const empty=$('#directory-empty');
+    if (empty) empty.textContent=directoryEmptyMessages[languageCode];
+    return;
+  }
   if (restaurant) $('.brand').setAttribute('aria-label',restaurant.name+' · '+t('openMenu'));
   if (dishId) {
     if (restaurant) showDish(items.find(item=>item.id===dishId));
@@ -426,10 +452,11 @@ async function loadDirectory() {
   const data=await menuData('menus.json');
   const directory=$('#directory');
   directory.hidden=false;
-  $('.language-picker').hidden=true;
   const entries=data.filter(restaurant=>validSlug(restaurant.slug));
   if (!entries.length) {
-    directory.append(element('p','Рестораны пока не добавлены.'));
+    const empty=element('p',directoryEmptyMessages[languageCode]);
+    empty.id='directory-empty';
+    directory.append(empty);
     return;
   }
   const list=element('ul');
