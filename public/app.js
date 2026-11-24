@@ -1,4 +1,4 @@
-import {languages,sectionTranslations} from './languages.js';
+import {languages,nutritionLabels,sectionTranslations} from './languages.js';
 import {flags} from './flags.js';
 import {mohonSlug,mohonName,mohonSections} from './mohon-menu.js';
 
@@ -263,6 +263,47 @@ function addTilt(figure) {
   });
 }
 
+const nutrients=['calories','protein','fat','carbs'];
+
+function dishNutrition(nutrition) {
+  const values=nutrients.filter(key=>Number.isFinite(nutrition?.[key]));
+  if (!values.length) return null;
+  const [title,...labels]=nutritionLabels[languageCode];
+  const grams=new Intl.NumberFormat(languageCode,{style:'unit',unit:'gram'});
+  const number=new Intl.NumberFormat(languageCode);
+  const section=element('section');
+  section.append(element('h2',title+' · '+grams.format(100)));
+  const list=element('dl','','nutrition-values');
+  for (const key of values) {
+    const row=element('div');
+    const value=nutrition[key];
+    row.append(element('dt',labels[nutrients.indexOf(key)]),
+      element('dd',key==='calories' ? number.format(value)+' '+labels[4] : grams.format(value)));
+    list.append(row);
+  }
+  section.append(list);
+  return section;
+}
+
+function nutritionEditor(entry) {
+  const group=element('fieldset','','nutrition-editor');
+  group.append(element('legend','КБЖУ на 100 г'));
+  const labels=nutritionLabels.ru.slice(1,5);
+  for (const [index,key] of nutrients.entries()) {
+    const unit=key==='calories' ? 'ккал' : 'г';
+    const label=field(labels[index]+' ('+unit+')','nutrition-'+key,{
+      value:entry?.nutrition?.[key] ?? '',
+      required:false,
+      maxlength:7
+    });
+    const input=label.querySelector('input');
+    input.inputMode='decimal';
+    input.pattern='[0-9]{1,4}([.,][0-9]{1,2})?';
+    group.append(label);
+  }
+  return group;
+}
+
 function showDish(item) {
   ingredientObserver?.disconnect();
   ingredientObserver=null;
@@ -282,6 +323,8 @@ function showDish(item) {
   copy.append(element('p',categoryName,'eyebrow'),element('h1',item.name));
   if (item.description) copy.append(element('p',item.description));
   copy.append(element('span',item.price,'price'));
+  const nutrition=dishNutrition(item.nutrition);
+  if (nutrition) copy.append(nutrition);
   if (item.illustration) copy.append(element('p','Фото для примера','sample-photo-note'));
   const markers=item.markers ?? [];
   if (markers.length) {
@@ -751,6 +794,7 @@ async function manageMenu(venue,content) {
       ...(venue.sample ? [sectionField] : []),
       field('Цена','price',{value:entry?.price,maxlength:32,placeholder:'45 000 сум'}),
       field('Описание','description',{type:'textarea',value:entry?.description,maxlength:500,required:false}),
+      nutritionEditor(entry),
       photoField,
       markerEditor(entry,photoField)
     ],async data=>{
