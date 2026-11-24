@@ -589,8 +589,7 @@ async function cabinet() {
       form('Зарегистрировать ресторан',[
         lastName,firstName,phone,email,
         field('Название ресторана','name',{maxlength:100}),
-        field('Адрес меню','slug',{maxlength:48,placeholder:'например, basil-kitchen'}),
-        element('p','При регистрации имя, фамилия, телефон и почта передаются системному администратору в Telegram.','admin-muted')
+        field('Адрес меню','slug',{maxlength:48,placeholder:'например, basil-kitchen'})
       ],async data=>{
         const details=Object.fromEntries(data);
         details.phone='+998'+details.phone;
