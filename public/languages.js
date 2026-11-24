@@ -28,3 +28,32 @@ export const languages = {
   uk: language('Українська','Мова|Кабінет|Додати логотип|Змінити логотип|Демо-меню|Наше|електронне меню|Страви|Напої|Алкоголь|Розділи меню|Вітрина меню|Попередня позиція|Наступна позиція|Відкрити|Повернутися до меню|Фото з позначками інгредієнтів|Інгредієнти|У цьому розділі поки немає позицій|Позицію не знайдено|Закрити|Увійти через Google|Вийти|Усі кабінети|Відкрити кабінет|Відкрити меню|Логотип'),
   pl: language('Polski','Język|Panel|Dodaj logo|Zmień logo|Menu demonstracyjne|Nasze|cyfrowe menu|Dania|Napoje|Alkohole|Kategorie menu|Galeria menu|Poprzednia pozycja|Następna pozycja|Otwórz|Wróć do menu|Zdjęcie z oznaczonymi składnikami|Składniki|Ta kategoria jest pusta|Nie znaleziono pozycji|Zamknij|Zaloguj się przez Google|Wyloguj się|Wszystkie panele|Otwórz panel|Otwórz menu|Logo')
 };
+
+const sectionKeys='hot grill soups salads cold-starters hot-starters pizza sides toppings dairy desserts'.split(' ');
+const sectionLabels={
+  uz:'Issiq taomlar|Mangaldagi taomlar|Shoʻrvalar|Salatlar|Sovuq gazaklar|Issiq gazaklar|Pitsa|Garnirlar|Toppinglar|Sut mahsulotlari|Shirinliklar',
+  en:'Hot dishes|Grilled dishes|Soups|Salads|Cold starters|Hot starters|Pizza|Side dishes|Toppings|Dairy products|Desserts',
+  it:'Piatti caldi|Piatti alla griglia|Zuppe|Insalate|Antipasti freddi|Antipasti caldi|Pizza|Contorni|Condimenti|Latticini|Dolci',
+  es:'Platos calientes|Platos a la parrilla|Sopas|Ensaladas|Entrantes fríos|Entrantes calientes|Pizza|Guarniciones|Extras|Lácteos|Postres',
+  fr:'Plats chauds|Grillades|Soupes|Salades|Entrées froides|Entrées chaudes|Pizzas|Accompagnements|Suppléments|Produits laitiers|Desserts',
+  de:'Warme Gerichte|Grillgerichte|Suppen|Salate|Kalte Vorspeisen|Warme Vorspeisen|Pizza|Beilagen|Extras|Milchprodukte|Desserts',
+  pt:'Pratos quentes|Grelhados|Sopas|Saladas|Entradas frias|Entradas quentes|Pizza|Acompanhamentos|Extras|Laticínios|Sobremesas',
+  tr:'Sıcak yemekler|Izgaralar|Çorbalar|Salatalar|Soğuk başlangıçlar|Sıcak başlangıçlar|Pizza|Garnitürler|Ek malzemeler|Süt ürünleri|Tatlılar',
+  kk:'Ыстық тағамдар|Мангалдағы тағамдар|Сорпалар|Салаттар|Салқын тіскебасарлар|Ыстық тіскебасарлар|Пицца|Гарнирлер|Қоспалар|Сүт өнімдері|Десерттер',
+  ky:'Ысык тамактар|Мангалдагы тамактар|Шорполор|Салаттар|Муздак закускалар|Ысык закускалар|Пицца|Гарнирлер|Кошумчалар|Сүт азыктары|Десерттер',
+  tg:'Таомҳои гарм|Таомҳои мангалӣ|Шӯрбоҳо|Хӯришҳо|Газакҳои хунук|Газакҳои гарм|Питса|Гарнирҳо|Иловаҳо|Маҳсулоти ширӣ|Шириниҳо',
+  az:'İsti yeməklər|Manqal yeməkləri|Şorbalar|Salatlar|Soyuq qəlyanaltılar|İsti qəlyanaltılar|Pizza|Qarnirlər|Əlavələr|Süd məhsulları|Desertlər',
+  ar:'أطباق ساخنة|مشاوي|شوربات|سلطات|مقبلات باردة|مقبلات ساخنة|بيتزا|أطباق جانبية|إضافات|منتجات الألبان|حلويات',
+  zh:'热菜|烧烤|汤品|沙拉|冷前菜|热前菜|披萨|配菜|加料|乳制品|甜点',
+  ja:'温かい料理|グリル料理|スープ|サラダ|冷たい前菜|温かい前菜|ピザ|付け合わせ|トッピング|乳製品|デザート',
+  ko:'따뜻한 요리|그릴 요리|수프|샐러드|차가운 전채|따뜻한 전채|피자|곁들임 요리|토핑|유제품|디저트',
+  hi:'गरम व्यंजन|ग्रिल्ड व्यंजन|सूप|सलाद|ठंडे स्टार्टर|गरम स्टार्टर|पिज़्ज़ा|साइड डिश|टॉपिंग|दुग्ध उत्पाद|मिठाइयाँ',
+  uk:'Гарячі страви|Страви на мангалі|Супи|Салати|Холодні закуски|Гарячі закуски|Піца|Гарніри|Топінги|Молочні продукти|Десерти',
+  pl:'Dania na ciepło|Dania z grilla|Zupy|Sałatki|Zimne przystawki|Gorące przystawki|Pizza|Dodatki do dań|Dodatki|Nabiał|Desery'
+};
+
+export const sectionTranslations=Object.fromEntries(Object.entries(sectionLabels).map(([code,labels])=>{
+  const names=labels.split('|');
+  if (names.length!==sectionKeys.length) throw new Error('Incomplete menu sections: '+code);
+  return [code,Object.fromEntries(sectionKeys.map((key,index)=>[key,names[index]]))];
+}));
