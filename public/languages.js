@@ -31,6 +31,7 @@ export const languages = {
 
 const sectionKeys='hot grill soups salads cold-starters hot-starters pizza sides toppings dairy desserts'.split(' ');
 const sectionLabels={
+  ru:'Горячие блюда|Блюда на мангале|Супы|Салаты|Холодные закуски|Горячие закуски|Пицца|Гарниры|Топинги|Молочные продукты|Десерты',
   uz:'Issiq taomlar|Mangaldagi taomlar|Shoʻrvalar|Salatlar|Sovuq gazaklar|Issiq gazaklar|Pitsa|Garnirlar|Toppinglar|Sut mahsulotlari|Shirinliklar',
   en:'Hot dishes|Grilled dishes|Soups|Salads|Cold starters|Hot starters|Pizza|Side dishes|Toppings|Dairy products|Desserts',
   it:'Piatti caldi|Piatti alla griglia|Zuppe|Insalate|Antipasti freddi|Antipasti caldi|Pizza|Contorni|Condimenti|Latticini|Dolci',
