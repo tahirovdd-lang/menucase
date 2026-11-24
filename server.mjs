@@ -279,7 +279,10 @@ async function api(request, url, env, sample) {
   const email=gmail(active?.email);
   const telegramId=telegramIdValid(active?.telegramId) ? active.telegramId : '';
   const identity=telegramId ? 'telegram:'+telegramId : email;
-  const owner=Boolean(email && active.address===ownerAddress(env));
+  const owner=Boolean(
+    (email && active.address===ownerAddress(env)) ||
+    (telegramId && telegramId===env.OWNER_TELEGRAM_ID?.trim())
+  );
   if (route === 'logout' && method === 'POST') {
     if (session) await bucket.delete(await sessionKey(token));
     return new Response('{}',{headers:{'Set-Cookie':cookie(url,'menu_session','',0),'Content-Type':'application/json'}});
