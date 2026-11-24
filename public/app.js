@@ -1,6 +1,5 @@
 import {languages,nutritionLabels,sectionTranslations} from './languages.js';
 import {flags} from './flags.js';
-import {mohonSlug,mohonName,mohonSections} from './mohon-menu.js';
 import {qrMatrix} from './qr-encoder.js';
 
 const $ = selector => document.querySelector(selector);
@@ -8,17 +7,11 @@ const controls = $('#controls');
 const status = $('#status');
 const [,route,segment,,restaurantDish] = location.pathname.split('/');
 const slug = route === 'r' ? segment : '';
-const dishId = route === 'dish' ? segment : restaurantDish;
+const dishId = slug ? restaurantDish : '';
 const adminPage=route==='admin';
 const menuUrl = slug ? '/r/'+slug : '/';
-const sampleMenu=!slug && !adminPage;
-const demoRestaurant=mohonName;
 const categories = {food:true,drinks:true,alcohol:true};
-const categoryPhotos={
-  food:'/mohon-dolma.webp',
-  drinks:'/mohon-ayran.webp',
-  alcohol:'/mohon-wine-example.webp'
-};
+const foodSections=Object.keys(sectionTranslations.ru);
 const selector = $('#language');
 const languageKey = 'na-stole-language';
 let languageCode = 'ru';
@@ -27,7 +20,7 @@ try {
   if (Object.hasOwn(languages,stored)) languageCode = stored;
 } catch {}
 const t = key => languages[languageCode].strings[key];
-const sectionName=section=>sectionTranslations[languageCode]?.[section?.id] ?? section?.title;
+const sectionName=section=>sectionTranslations[languageCode]?.[section] ?? sectionTranslations.ru[section];
 const regions={en:'gb',ar:'sa',ja:'jp',ko:'kr',zh:'cn',hi:'in',uk:'ua',kk:'kz',ky:'kg',tg:'tj'};
 const regionFor = code => regions[code] ?? code;
 const emojiFlag = region => String.fromCodePoint(...[...region.toUpperCase()].map(letter=>127397+letter.charCodeAt(0)));
@@ -41,10 +34,10 @@ for (const [code,language] of Object.entries(languages)) {
 }
 const menuParams=new URLSearchParams(location.search);
 const requestedSection=menuParams.get('section');
-let sampleSection=mohonSections.some(section=>section.id===requestedSection) ? requestedSection : null;
+let foodSection=foodSections.includes(requestedSection) ? requestedSection : null;
 let items=[];
 const selectedCategory=menuParams.get('category');
-let category=Object.hasOwn(categories,selectedCategory) ? selectedCategory : (sampleMenu && !sampleSection ? null : 'food');
+let category=Object.hasOwn(categories,selectedCategory) ? selectedCategory : 'food';
 let index = 0;
 let me;
 let restaurant;
@@ -78,7 +71,7 @@ async function attempt(run) {
   catch (error) { status.textContent = error.message; }
 }
 const visibleItems = () => items.filter(item=>item.category===category &&
-  (!sampleMenu || category!=='food' || item.section===sampleSection));
+  (category!=='food' || !foodSection || item.section===foodSection));
 function updateSelection() {
   const list = visibleItems();
   [...$('#rail').children].forEach((node,i) => {
@@ -99,8 +92,8 @@ function updateSelection() {
   details.replaceChildren(element('h2',item?.name ?? t('empty')));
   if (item) details.append(element('p',item.description),element('span',item.price,'price'));
 }
-function sampleMenuUrl(group,section) {
-  return group==='food' && section ? '/?section='+section : '/?category='+group;
+function categoryUrl(group,section) {
+  return menuUrl+(group==='food' && section ? '?section='+section : '?category='+group);
 }
 
 function draw() {
@@ -109,47 +102,45 @@ function draw() {
     const filter=button(t(key),()=>{
       if (key===category) return;
       category=key;
-      sampleSection=null;
+      foodSection=null;
       index=0;
-      if (sampleMenu) history.replaceState(null,'',sampleMenuUrl(key));
+      history.replaceState(null,'',categoryUrl(key));
       draw();
       filters.querySelector('[aria-pressed=true]').focus({preventScroll:true});
     });
     filter.setAttribute('aria-pressed',String(key===category));
-    if (sampleMenu) {
-      filter.className='featured-category';
-      const label=element('span',t(key),'featured-category-label');
+    filter.className='featured-category';
+    filter.replaceChildren(element('span',t(key),'featured-category-label'));
+    const preview=items.find(item=>item.category===key && item.photo);
+    if (preview) {
       const circle=element('span','','featured-category-circle');
       const photo=element('img');
-      photo.src=categoryPhotos[key];
+      photo.src=preview.photo;
       photo.alt='';
-      photo.width=640;
-      photo.height=640;
+      photo.onerror=()=>circle.remove();
       circle.append(photo);
-      filter.replaceChildren(label,circle);
+      filter.append(circle);
     }
     return filter;
   }));
-  if (sampleMenu) {
-    const subcategories=$('#subcategories');
-    subcategories.hidden=category!=='food';
-    subcategories.replaceChildren(...(category==='food' ? mohonSections.map(section=>{
-      const filter=button(sectionName(section),()=>{
-        sampleSection=section.id;
-        index=0;
-        history.replaceState(null,'',sampleMenuUrl(category,section.id));
-        draw();
-        subcategories.querySelector('[aria-pressed=true]').focus({preventScroll:true});
-      });
-      filter.setAttribute('aria-pressed',String(sampleSection===section.id));
-      return filter;
-    }) : []));
-    const showItems=Boolean(category && (category!=='food' || sampleSection));
-    $('.stage').hidden=!showItems || !visibleItems().length;
-    $('#details').hidden=!showItems;
-  }
-  $('#rail').replaceChildren(...visibleItems().map((item,i)=>{
-    const card = link('',(slug ? menuUrl : '')+'/dish/'+item.id);
+  const subcategories=$('#subcategories');
+  const sections=category==='food' ? foodSections.filter(section=>items.some(item=>item.category==='food' && item.section===section)) : [];
+  subcategories.hidden=!sections.length;
+  subcategories.replaceChildren(...sections.map(section=>{
+    const filter=button(sectionName(section),()=>{
+      foodSection=section===foodSection ? null : section;
+      index=0;
+      history.replaceState(null,'',categoryUrl(category,foodSection));
+      draw();
+      subcategories.children[sections.indexOf(section)]?.focus({preventScroll:true});
+    });
+    filter.setAttribute('aria-pressed',String(foodSection===section));
+    return filter;
+  }));
+  const visible=visibleItems();
+  $('.stage').hidden=!visible.length;
+  $('#rail').replaceChildren(...visible.map(item=>{
+    const card = link('',menuUrl+'/dish/'+item.id);
     card.className='card';
     card.setAttribute('aria-label',t('open')+' '+item.name);
     const visual=element('div','','card-visual');
@@ -310,7 +301,7 @@ function showDish(item) {
   ingredientObserver=null;
   const main=$('main');
   const page=element('article','','dish-page');
-  const backUrl=item ? (sampleMenu ? sampleMenuUrl(item.category,item.section) : menuUrl+'?category='+item.category) : menuUrl;
+  const backUrl=item ? categoryUrl(item.category,item.section) : menuUrl;
   page.append(link(t('back'),backUrl));
   if (!item) {
     page.append(element('h1',t('notFound')));
@@ -320,13 +311,12 @@ function showDish(item) {
   document.title=item.name+' · На столе';
   const layout=element('div','','dish-layout');
   const copy=element('div','','dish-copy');
-  const categoryName=sampleMenu && item.category==='food' ? sectionName(mohonSections.find(section=>section.id===item.section)) : t(item.category);
+  const categoryName=sectionName(item.section) ?? t(item.category);
   copy.append(element('p',categoryName,'eyebrow'),element('h1',item.name));
   if (item.description) copy.append(element('p',item.description));
   copy.append(element('span',item.price,'price'));
   const nutrition=dishNutrition(item.nutrition);
   if (nutrition) copy.append(nutrition);
-  if (item.illustration) copy.append(element('p','Фото для примера','sample-photo-note'));
   const markers=item.markers ?? [];
   if (markers.length) {
     copy.append(element('h2',t('ingredients')));
@@ -533,12 +523,12 @@ async function cabinet() {
     summary.append(element('strong',entry.name));
     const state=element('span',entry.enabled===false ? 'Меню выключено' : 'Меню включено','admin-muted');
     if (me.owner) {
-      const menuPath=entry.sample ? '/' : '/r/'+entry.slug;
+      const menuPath='/r/'+entry.slug;
       summary.append(element('span',menuPath,'admin-muted'));
     }
     summary.append(state);
     const actions=element('div','','actions');
-    if (me.owner && !entry.sample) {
+    if (me.owner) {
       const control=element('input');
       control.type='checkbox';
       control.setAttribute('role','switch');
@@ -688,7 +678,7 @@ async function manage(venue,section) {
   $('#admin-title').textContent=venue.name;
   document.title=venue.name+' · Кабинет администратора';
   const links=element('div','','admin-venue-links');
-  links.append(link('Все рестораны',cabinetUrl()),link(t('openMenu'),venue.sample ? '/' : '/r/'+venue.slug));
+  links.append(link('Все рестораны',cabinetUrl()),link(t('openMenu'),'/r/'+venue.slug));
   const nav=element('nav','','admin-nav');
   nav.setAttribute('aria-label','Разделы кабинета');
   for (const [key,label] of Object.entries(adminSections)) {
@@ -783,8 +773,8 @@ async function showBilling(venue,content) {
 
 function showAccess(venue,content) {
   content.replaceChildren(element('h2','Доступ администраторов'));
-  if (venue.sample || !me.owner) {
-    content.append(element('p',venue.sample ? 'Меню The MOHON доступно для редактирования владельцу сайта.' : 'Доступом управляет владелец платформы.','admin-muted'));
+  if (!me.owner) {
+    content.append(element('p','Доступом управляет владелец платформы.','admin-muted'));
     return;
   }
   if (venue.registrationContact) {
@@ -828,7 +818,7 @@ function categorySelect() {
 }
 
 function menuQrCard(venue) {
-  const url=new URL(venue.sample ? '/' : '/r/'+venue.slug,location.origin).href;
+  const url=new URL('/r/'+venue.slug,location.origin).href;
   const matrix=qrMatrix(url);
   const margin=4;
   const scale=12;
@@ -879,8 +869,7 @@ async function manageMenu(venue,content) {
   search.placeholder='Найти позицию';
   search.setAttribute('aria-label','Поиск по названиям позиций');
   toolbar.append(filter);
-  if (venue.sample) toolbar.append(search);
-  toolbar.append(add);
+  toolbar.append(search,add);
   const qr=element('div');
   content.append(element('h2','Меню'),toolbar,editor,list,qr);
   filter.onchange=drawEntries;
@@ -900,13 +889,16 @@ async function manageMenu(venue,content) {
     const sectionField=element('label','Подкатегория');
     const sectionSelect=element('select');
     sectionSelect.name='section';
-    for (const section of mohonSections) {
+    const noSection=element('option','Без подкатегории');
+    noSection.value='';
+    sectionSelect.append(noSection);
+    for (const section of foodSections) {
       const option=element('option',sectionName(section));
-      option.value=section.id;
+      option.value=section;
       sectionSelect.append(option);
     }
     sectionField.append(sectionSelect);
-    sectionSelect.value=entry?.category==='food' && entry.section ? entry.section : mohonSections[0].id;
+    sectionSelect.value=entry?.section ?? '';
     function updateSectionField() {
       sectionField.hidden=select.value!=='food';
       sectionSelect.disabled=sectionField.hidden;
@@ -917,7 +909,7 @@ async function manageMenu(venue,content) {
     const fields=form('Сохранить',[
       field('Название','name',{value:entry?.name,maxlength:100}),
       categoryField,
-      ...(venue.sample ? [sectionField] : []),
+      sectionField,
       field('Цена','price',{value:entry?.price,maxlength:32,placeholder:'45 000 сум'}),
       field('Описание','description',{type:'textarea',value:entry?.description,maxlength:500,required:false}),
       nutritionEditor(entry),
@@ -958,8 +950,7 @@ async function manageMenu(venue,content) {
         thumb.loading='lazy';
       } else thumb.setAttribute('aria-hidden','true');
       const copy=element('div','','admin-item-copy');
-      const section=venue.sample && entry.category==='food' && mohonSections.find(value=>value.id===entry.section);
-      copy.append(element('strong',entry.name),element('span',section ? sectionName(section) : t(entry.category),'admin-muted'));
+      copy.append(element('strong',entry.name),element('span',sectionName(entry.section) ?? t(entry.category),'admin-muted'));
       const actions=element('div','','actions');
       actions.append(button('Изменить',()=>openEditor(entry),'quiet'),button('Удалить',async()=>{
         if (!confirm('Удалить «'+entry.name+'» из меню?')) return;
@@ -979,7 +970,7 @@ async function manageMenu(venue,content) {
 function updateHeaderAccess() {
   const access=me?.restaurants ?? [];
   const canManage=Boolean(restaurant && access.some(venue=>venue.slug===restaurant.slug));
-  $('#account').hidden=!(sampleMenu || canManage);
+  $('#account').hidden=!(canManage || (!slug && !adminPage));
 }
 function updateBrand() {
   const brand=$('.brand');
@@ -1014,17 +1005,17 @@ async function editLogo(venue,content) {
       render(result.logo);
       status.textContent='Логотип сохранён.';
     }));
-    if (logo && (!venue.sample || logo!== '/the-mohon-logo.webp')) content.append(button(venue.sample ? 'Вернуть исходный логотип' : 'Убрать логотип',async()=>{
+    if (logo) content.append(button('Убрать логотип',async()=>{
       await request(endpoint,{method:'DELETE'});
-      render(venue.sample ? '/the-mohon-logo.webp' : '');
-      status.textContent=venue.sample ? 'Исходный логотип восстановлен.' : 'Логотип убран.';
+      render('');
+      status.textContent='Логотип убран.';
     },'quiet'));
   }
 
   render(details.logo);
 }
 async function refreshMenu() {
-  const data=await request('/api/restaurants/'+(sampleMenu ? mohonSlug : slug));
+  const data=await request('/api/restaurants/'+slug);
   restaurant=data.restaurant;
   updateBrand();
   items=data.items;
@@ -1046,7 +1037,8 @@ function applyLanguage() {
   $('#account').textContent=t('cabinet');
   if (adminPage) return;
   updateHeaderAccess();
-  $('.brand').setAttribute('aria-label',(restaurant?.name ?? demoRestaurant)+' · '+t('openMenu'));
+  if (!slug) return;
+  if (restaurant) $('.brand').setAttribute('aria-label',restaurant.name+' · '+t('openMenu'));
   if (dishId) {
     if (restaurant) showDish(items.find(item=>item.id===dishId));
     return;
@@ -1055,13 +1047,12 @@ function applyLanguage() {
   if (!headline) return;
   const space=['zh','ja'].includes(languageCode)?'':' ';
   headline.textContent=t('titleA')+space+t('titleB');
-  $('#restaurant').textContent=restaurant?.name ?? demoRestaurant;
-  document.title=(restaurant?.name ?? demoRestaurant)+' · '+headline.textContent;
+  if (restaurant) document.title=restaurant.name+' · '+headline.textContent;
   $('#filters').setAttribute('aria-label',t('sections'));
   $('.stage').setAttribute('aria-label',t('display'));
   $('#previous').setAttribute('aria-label',t('previous'));
   $('#next').setAttribute('aria-label',t('next'));
-  draw();
+  if (restaurant) draw();
 }
 selector.onchange=()=>{
   if (!Object.hasOwn(languages,selector.value)) return;
@@ -1069,17 +1060,7 @@ selector.onchange=()=>{
   try {localStorage.setItem(languageKey,languageCode);} catch {}
   applyLanguage();
 };
-if (sampleMenu) {
-  document.documentElement.classList.add('sample-menu');
-  const brand=$('.brand');
-  brand.classList.add('has-logo');
-  const logo=element('img');
-  logo.src='/the-mohon-logo.webp';
-  logo.alt='';
-  logo.width=512;
-  logo.height=512;
-  brand.append(logo);
-}
+if (slug) document.documentElement.classList.add('restaurant-menu');
 applyLanguage();
 if (adminPage) {
   document.title='Кабинет администратора · На столе';
@@ -1096,7 +1077,7 @@ if (adminPage) {
     if (login==='gmail') status.textContent='Выберите подтверждённый аккаунт @gmail.com.';
     if (login==='failed') status.textContent='Войти не удалось. Попробуйте ещё раз.';
   });
-} else {
+} else if (slug) {
   refreshMenu().catch(error=>$('main').replaceChildren(element('h2',error.message)));
   request('/api/me').then(data=>{me=data;updateHeaderAccess();}).catch(()=>{});
 }
