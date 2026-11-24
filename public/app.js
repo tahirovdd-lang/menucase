@@ -346,7 +346,7 @@ function row(...nodes) {
   return node;
 }
 const adminParams=new URLSearchParams(location.search);
-const adminSections={menu:'Меню',appearance:'Оформление',access:'Доступ'};
+const adminSections={menu:'Меню',appearance:'Оформление',access:'Доступ',billing:'Оплаты'};
 
 function cabinetUrl(venue,section='menu') {
   return venue ? '/admin?'+new URLSearchParams({venue:venue.slug,section}) : '/admin';
@@ -381,7 +381,7 @@ async function cabinet() {
   const venue=me.restaurants.find(entry=>entry.slug===adminParams.get('venue'));
   if (venue) {
     const requested=adminParams.get('section');
-    const section=Object.hasOwn(adminSections,requested) || me.owner && requested==='billing' ? requested : 'menu';
+    const section=Object.hasOwn(adminSections,requested) ? requested : 'menu';
     await manage(venue,section);
     return;
   }
@@ -456,7 +456,7 @@ async function cabinet() {
       };
       actions.append(toggle);
     }
-    if (me.owner) actions.append(link('Оплаты',cabinetUrl(entry,'billing')));
+    actions.append(link('Оплаты',cabinetUrl(entry,'billing')));
     actions.append(link('Открыть кабинет',cabinetUrl(entry)));
     const line=row(summary,actions);
     line.classList.add('venue-row');
@@ -559,8 +559,7 @@ async function manage(venue,section) {
   links.append(link('Все рестораны',cabinetUrl()),link(t('openMenu'),venue.sample ? '/' : '/r/'+venue.slug));
   const nav=element('nav','','admin-nav');
   nav.setAttribute('aria-label','Разделы кабинета');
-  const sections=me.owner ? {...adminSections,billing:'Оплаты'} : adminSections;
-  for (const [key,label] of Object.entries(sections)) {
+  for (const [key,label] of Object.entries(adminSections)) {
     const tab=link(label,cabinetUrl(venue,key));
     if (key===section) tab.setAttribute('aria-current','page');
     nav.append(tab);
@@ -574,12 +573,17 @@ async function manage(venue,section) {
 }
 
 async function showBilling(venue,content) {
-  content.append(element('h2','Календарь оплат'),element('p','Отметьте оплаченные дни и сохраните изменения.','admin-muted'));
+  content.append(element('h2','Календарь оплат'),element('p',me.owner ? 'Отметьте оплаченные дни и сохраните изменения.' : 'Здесь отображаются дни, за которые отмечена оплата.','admin-muted'));
   const monthField=field('Месяц','billing-month',{type:'month'});
   const month=monthField.querySelector('input');
   const today=new Intl.DateTimeFormat('ru-RU',{timeZone:'Asia/Tashkent',year:'numeric',month:'2-digit'}).formatToParts();
   month.value=today.find(part=>part.type==='year').value+'-'+today.find(part=>part.type==='month').value;
   const daysGrid=element('div','','billing-days');
+  const paidCount=element('p','','admin-muted');
+  paidCount.setAttribute('aria-live','polite');
+  function updatePaidCount() {
+    paidCount.textContent='Дней с отметкой об оплате: '+current.days.size;
+  }
   const save=button('Сохранить оплату',async()=>{
     const loaded=current;
     save.disabled=true;
@@ -598,18 +602,22 @@ async function showBilling(venue,content) {
     }
   });
   let current;
-  content.append(monthField,daysGrid,save);
+  let loadSequence=0;
+  content.append(monthField,daysGrid,paidCount);
+  if (me.owner) content.append(save);
   month.onchange=()=>attempt(loadMonth);
   await loadMonth();
 
   async function loadMonth() {
+    const sequence=++loadSequence;
     daysGrid.replaceChildren();
+    paidCount.textContent='';
     save.disabled=true;
     if (!month.value || !month.checkValidity()) return;
     const value=month.value;
     const path='/api/billing/'+venue.slug+'/'+value;
     const result=await request(path);
-    if (month.value!==value) return;
+    if (sequence!==loadSequence) return;
     current={path,revision:result.revision,days:new Set(result.days)};
     const [year,monthNumber]=value.split('-').map(Number);
     const first=new Date(Date.UTC(year,monthNumber-1,1));
@@ -617,15 +625,26 @@ async function showBilling(venue,content) {
     for (const day of ['Пн','Вт','Ср','Чт','Пт','Сб','Вс']) daysGrid.append(element('span',day,'admin-muted'));
     for (let slot=0;slot<(first.getUTCDay()+6)%7;slot++) daysGrid.append(element('span'));
     for (let day=1;day<=count;day++) {
+      const date=value+'-'+String(day).padStart(2,'0');
+      if (!me.owner) {
+        const paid=current.days.has(day);
+        const cell=element('span',String(day),'billing-view-day');
+        cell.dataset.paid=String(paid);
+        cell.append(element('span',' '+date+' · '+(paid ? 'Оплачено' : 'Без отметки'),'billing-status-text'));
+        daysGrid.append(cell);
+        continue;
+      }
       const cell=button(String(day),()=>{
         if (current.days.has(day)) current.days.delete(day);
         else current.days.add(day);
         cell.setAttribute('aria-pressed',String(current.days.has(day)));
+        updatePaidCount();
       },'quiet');
-      cell.setAttribute('aria-label',value+'-'+String(day).padStart(2,'0'));
+      cell.setAttribute('aria-label',date);
       cell.setAttribute('aria-pressed',String(current.days.has(day)));
       daysGrid.append(cell);
     }
+    updatePaidCount();
     save.disabled=false;
   }
 }
