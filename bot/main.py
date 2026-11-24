@@ -88,6 +88,8 @@ def registration_request(key, payload):
         data=body,
         headers={
             "Content-Type": "application/json",
+            "User-Agent": "MenuCase-Bot/1.0",
+            "Accept": "application/json",
             "X-MenuCase-Time": timestamp,
             "X-MenuCase-Signature": signature,
         },
