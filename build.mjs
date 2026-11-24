@@ -2,7 +2,7 @@ import {mohonSlug,mohonName,mohonSections,mohonItems} from './public/mohon-menu.
 import {createHash} from 'node:crypto';
 import {mkdir,readFile,writeFile,copyFile} from 'node:fs/promises';
 
-const types = {'index.html':'text/html','style.css':'text/css','app.js':'text/javascript','languages.js':'text/javascript','flags.js':'text/javascript','mohon-menu.js':'text/javascript'};
+const types = {'index.html':'text/html','style.css':'text/css','app.js':'text/javascript','languages.js':'text/javascript','flags.js':'text/javascript','mohon-menu.js':'text/javascript','qr-encoder.js':'text/javascript'};
 const assets = {};
 for (const [file,type] of Object.entries(types)) {
   assets['/'+file] = {type:type+'; charset=utf-8',body:await readFile(new URL('./public/'+file,import.meta.url),'utf8')};
