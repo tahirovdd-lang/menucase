@@ -395,28 +395,66 @@ function cabinetUrl(venue,section='menu') {
   return venue ? '/admin?'+new URLSearchParams({venue:venue.slug,section}) : '/admin';
 }
 
+function signInPanel() {
+  const card=element('section','','admin-card sign-in-card');
+  const google=link('Продолжить с Google','/auth/google');
+  google.className='quiet sign-in-option';
+  const telegram=button('Продолжить с Telegram',startTelegram,'quiet sign-in-option');
+  const challenge=element('div');
+  challenge.hidden=true;
+  if (!me.configured) {
+    google.removeAttribute('href');
+    google.setAttribute('aria-disabled','true');
+    google.append(element('small','Подключение Google ещё не настроено'));
+  }
+  if (!me.telegramConfigured) {
+    telegram.disabled=true;
+    telegram.append(element('small','Подключение бота ещё не завершено'));
+  }
+  card.append(google,telegram,challenge);
+  return card;
+
+  async function startTelegram() {
+    telegram.disabled=true;
+    try {
+      const {url}=await request('/api/telegram-login/start',{method:'POST'});
+      const open=link('Открыть бота MenuCase',url);
+      open.target='_blank';
+      open.rel='noopener noreferrer';
+      open.className='admin-primary';
+      const code=field('Шестизначный код из Telegram','code',{maxlength:6,placeholder:'000000'});
+      const input=code.querySelector('input');
+      input.pattern='[0-9]{6}';
+      input.inputMode='numeric';
+      input.autocomplete='one-time-code';
+      challenge.replaceChildren(element('p','Откройте бота и нажмите Start. Он пришлёт код в личный чат.'),open,
+        form('Подтвердить вход',[code],async data=>{
+          const {status:result}=await request('/api/telegram-login/complete',{
+            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:data.get('code')})
+          });
+          if (result==='expired') throw new Error('Время или попытки истекли. Запросите новый код.');
+          location.reload();
+        }));
+      challenge.hidden=false;
+      open.focus();
+    } finally {
+      telegram.disabled=false;
+    }
+  }
+}
+
 async function cabinet() {
   me=await request('/api/me');
   const account=$('#admin-account');
   account.replaceChildren();
   controls.replaceChildren();
-  if (!me.email) {
-    $('#admin-title').textContent='Вход в кабинет';
-    const card=element('section','','admin-card');
-    card.append(element('p','Чтобы открыть кабинет, войдите с адресом @gmail.com.'));
-    const signIn=link('Войти через Google','/auth/google');
-    signIn.className='admin-primary';
-    signIn.target='_top';
-    card.append(signIn);
-    if (!me.configured) {
-      signIn.removeAttribute('href');
-      signIn.setAttribute('aria-disabled','true');
-      card.append(element('p','Вход через Google станет доступен после настройки подключения.','admin-muted'));
-    }
-    controls.append(card);
+  if (!me.email && !me.telegramId) {
+    $('#admin-title').textContent='Войти или зарегистрироваться';
+    controls.append(signInPanel());
     return;
   }
-  account.append(element('span',me.email,'admin-muted'),button(t('signOut'),async()=>{
+  const accountLabel=me.verifiedEmail || me.email || 'Telegram · '+me.telegramId;
+  account.append(element('span',accountLabel,'admin-muted'),button(t('signOut'),async()=>{
     await request('/api/logout',{method:'POST'});
     location.assign(cabinetUrl());
   },'quiet'));
@@ -529,8 +567,10 @@ async function cabinet() {
       phoneInput.value=value.startsWith('+998') || (digits.length===12 && digits.startsWith('998'))
         ? digits.slice(3) : digits;
     };
-    const email=field('Подтверждённая почта','email',{type:'email',value:me.verifiedEmail || me.email});
-    email.querySelector('input').readOnly=true;
+    const email=field(me.telegramId ? 'Контактная почта @gmail.com' : 'Подтверждённая почта','email',{
+      type:'email',value:me.verifiedEmail || me.email,placeholder:'name@gmail.com'
+    });
+    email.querySelector('input').readOnly=!me.telegramId;
     registration.append(element('h2','Подключить ресторан'),
       element('p','После регистрации можно заполнить меню. Системный администратор включит его для гостей.','admin-muted'),
       form('Зарегистрировать ресторан',[
@@ -541,7 +581,6 @@ async function cabinet() {
       ],async data=>{
         const details=Object.fromEntries(data);
         details.phone='+998'+details.phone;
-        delete details.email;
         const {restaurant:entry}=await request('/api/register',{
           method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(details)
         });
