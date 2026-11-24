@@ -1,4 +1,4 @@
-import {languages} from './languages.js';
+import {languages,sectionTranslations} from './languages.js';
 import {flags} from './flags.js';
 import {mohonSlug,mohonName,mohonSections} from './mohon-menu.js';
 
@@ -26,6 +26,7 @@ try {
   if (Object.hasOwn(languages,stored)) languageCode = stored;
 } catch {}
 const t = key => languages[languageCode].strings[key];
+const sectionName=section=>sectionTranslations[languageCode]?.[section?.id] ?? section?.title;
 const regions={en:'gb',ar:'sa',ja:'jp',ko:'kr',zh:'cn',hi:'in',uk:'ua',kk:'kz',ky:'kg',tg:'tj'};
 const regionFor = code => regions[code] ?? code;
 const emojiFlag = region => String.fromCodePoint(...[...region.toUpperCase()].map(letter=>127397+letter.charCodeAt(0)));
@@ -132,7 +133,7 @@ function draw() {
     const subcategories=$('#subcategories');
     subcategories.hidden=category!=='food';
     subcategories.replaceChildren(...(category==='food' ? mohonSections.map(section=>{
-      const filter=button(section.title,()=>{
+      const filter=button(sectionName(section),()=>{
         sampleSection=section.id;
         index=0;
         history.replaceState(null,'',sampleMenuUrl(category,section.id));
@@ -277,7 +278,7 @@ function showDish(item) {
   document.title=item.name+' · На столе';
   const layout=element('div','','dish-layout');
   const copy=element('div','','dish-copy');
-  const categoryName=sampleMenu && item.category==='food' ? mohonSections.find(section=>section.id===item.section)?.title : t(item.category);
+  const categoryName=sampleMenu && item.category==='food' ? sectionName(mohonSections.find(section=>section.id===item.section)) : t(item.category);
   copy.append(element('p',categoryName,'eyebrow'),element('h1',item.name));
   if (item.description) copy.append(element('p',item.description));
   copy.append(element('span',item.price,'price'));
@@ -668,7 +669,7 @@ async function manageMenu(venue,content) {
     const sectionSelect=element('select');
     sectionSelect.name='section';
     for (const section of mohonSections) {
-      const option=element('option',section.title);
+      const option=element('option',sectionName(section));
       option.value=section.id;
       sectionSelect.append(option);
     }
@@ -723,7 +724,7 @@ async function manageMenu(venue,content) {
       } else thumb.setAttribute('aria-hidden','true');
       const copy=element('div','','admin-item-copy');
       const section=venue.sample && entry.category==='food' && mohonSections.find(value=>value.id===entry.section);
-      copy.append(element('strong',entry.name),element('span',section ? section.title : t(entry.category),'admin-muted'));
+      copy.append(element('strong',entry.name),element('span',section ? sectionName(section) : t(entry.category),'admin-muted'));
       const actions=element('div','','actions');
       actions.append(button('Изменить',()=>openEditor(entry),'quiet'),button('Удалить',async()=>{
         if (!confirm('Удалить «'+entry.name+'» из меню?')) return;
