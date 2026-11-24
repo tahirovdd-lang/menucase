@@ -4,7 +4,7 @@
 
 ## Локальный просмотр
 
-С Node.js 24 выполните `node local.mjs` и откройте `http://127.0.0.1:4173`. Демо-меню доступно сразу. Для локального входа запустите `node --env-file=.env local.mjs` и добавьте в Google Cloud URI `http://127.0.0.1:4173/auth/google/callback`. Сервер хранит локальные записи и фото в `.menu-data/`.
+С Node.js 24 выполните `node local.mjs` и откройте `http://127.0.0.1:4173`. Рестораны и меню создаются в кабинете `/admin`. Для локального входа запустите `node --env-file=.env local.mjs` и добавьте в Google Cloud URI `http://127.0.0.1:4173/auth/google/callback`. Сервер хранит локальные записи и фото в `.menu-data/`.
 
 ## Сборка и настройка
 
