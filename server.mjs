@@ -35,9 +35,12 @@ function cookie(url, name, value, age) {
   return name+'='+value+'; Path=/; HttpOnly; SameSite=Lax; Max-Age='+age+(url.protocol === 'https:' ? '; Secure' : '');
 }
 
+const ownerAddress = env => (env.SITES_OWNER_EMAIL || env.OWNER_GMAIL)?.trim().toLowerCase();
+const googleConfigured = env => Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+
 async function google(request, url, env) {
   const callback = url.origin+'/auth/google/callback';
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !gmail(env.OWNER_GMAIL)) {
+  if (!googleConfigured(env)) {
     return error('Вход через Google ещё не настроен.',503);
   }
   if (url.pathname === '/auth/google') {
@@ -163,14 +166,8 @@ async function api(request, url, env, sample) {
   }
   const token = cookieValue(request,'menu_session');
   const session = token && /^[a-f0-9]{64}$/.test(token) && await read(bucket,await sessionKey(token));
-  const googleEmail = session?.expires > Date.now() ? gmail(session.email) : '';
-  const siteAddress=request.headers.get('oai-authenticated-user-email')?.trim().toLowerCase();
-  const siteIdentity=Boolean(request.headers.get('oai-authenticated-user-id'));
-  const siteEmail=siteIdentity ? gmail(siteAddress) : '';
-  const siteSession=Boolean(siteEmail);
-  const email=siteSession ? siteEmail : googleEmail;
-  const systemAddress=env.SITES_OWNER_EMAIL?.trim().toLowerCase();
-  const owner=Boolean(systemAddress && (siteSession ? siteAddress===systemAddress : googleEmail && session.address===systemAddress));
+  const email = session?.expires > Date.now() ? gmail(session.email) : '';
+  const owner=Boolean(email && session.address===ownerAddress(env));
   if (route === 'logout' && method === 'POST') {
     if (session) await bucket.delete(await sessionKey(token));
     return new Response('{}',{headers:{'Set-Cookie':cookie(url,'menu_session','',0),'Content-Type':'application/json'}});
@@ -179,7 +176,7 @@ async function api(request, url, env, sample) {
     const signed = Boolean(email);
     const restaurants = signed ? (await all(bucket,'restaurant/')).filter(r=>owner || r.admins.includes(email)) : [];
     if (owner) restaurants.unshift({name:sample.name,slug:sample.slug,sample:true});
-    return json({email,owner,siteSession,gmailRequired:siteIdentity && !siteSession,siteLogin:Boolean(env.SITES_OWNER_EMAIL),configured:Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && gmail(env.OWNER_GMAIL)),restaurants:restaurants.map(r=>owner?r:{name:r.name,slug:r.slug,enabled:r.enabled!==false})});
+    return json({email,owner,configured:googleConfigured(env),restaurants:restaurants.map(r=>owner?r:{name:r.name,slug:r.slug,enabled:r.enabled!==false})});
   }
   if (!email) return error('Войдите с адресом @gmail.com.',401);
   if (route==='register' && method==='POST') {
