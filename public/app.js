@@ -390,11 +390,49 @@ async function cabinet() {
   const venues=element('section','','admin-card');
   venues.append(element('h2',me.owner ? 'Все рестораны' : 'Ваши рестораны'));
   if (!me.restaurants.length) venues.append(element('p',me.owner?'Создайте первый ресторан.':'Этому адресу пока не выдан доступ к ресторану.','admin-muted'));
+  const venueRows=element('div');
+  const search=element('input');
+  search.type='search';
+  search.placeholder='Название или адрес меню';
+  search.setAttribute('aria-label','Поиск ресторанов');
+  const filter=element('select');
+  filter.setAttribute('aria-label','Статус меню');
+  for (const [value,label] of [['all','Все статусы'],['active','Меню включено'],['inactive','Меню выключено']]) {
+    const option=element('option',label);
+    option.value=value;
+    filter.append(option);
+  }
+  const count=element('p','','admin-muted');
+  count.setAttribute('aria-live','polite');
+  const rows=[];
+  function filterVenues() {
+    const query=search.value.trim().toLocaleLowerCase();
+    let matching=0;
+    for (const {entry,line} of rows) {
+      const matchesStatus=filter.value==='all' ||
+        (filter.value==='active' ? entry.enabled!==false : entry.enabled===false);
+      line.hidden=!(matchesStatus && (entry.name+' '+entry.slug).toLocaleLowerCase().includes(query));
+      if (!line.hidden) matching++;
+    }
+    count.textContent=matching ? 'Показано '+matching+' из '+rows.length : 'Рестораны не найдены.';
+  }
+  if (me.owner && me.restaurants.length) {
+    const filters=element('div','','admin-toolbar');
+    filters.append(search,filter);
+    venues.append(filters,count);
+    search.oninput=filterVenues;
+    filter.onchange=filterVenues;
+  }
+  venues.append(venueRows);
   for (const entry of me.restaurants) {
     const summary=element('div','','admin-item-copy');
     summary.append(element('strong',entry.name));
     const state=element('span',entry.enabled===false ? 'Меню выключено' : 'Меню включено','admin-muted');
-    if (!entry.sample) summary.append(state);
+    if (me.owner) {
+      const menuPath=entry.sample ? '/' : '/r/'+entry.slug;
+      summary.append(element('span',menuPath,'admin-muted'));
+    }
+    summary.append(state);
     const actions=element('div','','actions');
     if (me.owner && !entry.sample) {
       const control=element('input');
@@ -410,6 +448,8 @@ async function cabinet() {
           const {enabled}=await admin('status',{slug:entry.slug,enabled:control.checked});
           entry.enabled=enabled;
           state.textContent=enabled ? 'Меню включено' : 'Меню выключено';
+          status.textContent=entry.name+' · '+state.textContent;
+          filterVenues();
         });
         control.checked=entry.enabled!==false;
         control.disabled=false;
@@ -418,8 +458,12 @@ async function cabinet() {
     }
     if (me.owner) actions.append(link('Оплаты',cabinetUrl(entry,'billing')));
     actions.append(link('Открыть кабинет',cabinetUrl(entry)));
-    venues.append(row(summary,actions));
+    const line=row(summary,actions);
+    line.classList.add('venue-row');
+    rows.push({entry,line});
+    venueRows.append(line);
   }
+  if (me.owner && rows.length) filterVenues();
   controls.append(venues);
   const registration=element('section','','admin-card');
   registration.append(element('h2','Подключить ресторан'),
