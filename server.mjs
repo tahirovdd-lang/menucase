@@ -103,6 +103,53 @@ function registrationMessage(venue) {
   ].join('\n');
 }
 
+const telegramIdValid = value => typeof value==='string' && /^[1-9][0-9]{0,15}$/.test(value);
+const telegramLoginConfigured = env => Boolean(env.REGISTRATION_BOT_PUBLIC_KEY &&
+  /^[A-Za-z0-9_]{5,32}$/.test(env.MENUCASE_TELEGRAM_BOT_USERNAME ?? ''));
+const telegramLoginKey = id => 'telegram-login/'+id;
+
+async function telegramLogin(request,url,env,action) {
+  if (!telegramLoginConfigured(env)) return error('Вход через Telegram ещё не подключён.',503);
+  if (request.method!=='POST') return error('Действие не поддерживается.',405);
+  const bucket=env.BUCKET;
+  if (action==='start') {
+    const pending=cookieValue(request,'menucase_telegram_login');
+    if (/^[a-f0-9]{32}\.[a-f0-9]{64}$/.test(pending ?? '')) {
+      await bucket.delete(telegramLoginKey(pending.split('.')[0]));
+    }
+    const id=crypto.randomUUID().replaceAll('-','');
+    const proof=random();
+    await write(bucket,telegramLoginKey(id),{proof:await hash(proof),expires:Date.now()+300000});
+    return Response.json({url:'https://t.me/'+env.MENUCASE_TELEGRAM_BOT_USERNAME+'?start=mc_'+id},{
+      headers:{'Cache-Control':'no-store','Set-Cookie':cookie(url,'menucase_telegram_login',id+'.'+proof,300)}
+    });
+  }
+  if (action!=='complete') return error('Действие не поддерживается.',405);
+  const pending=cookieValue(request,'menucase_telegram_login');
+  if (!/^[a-f0-9]{32}\.[a-f0-9]{64}$/.test(pending ?? '')) return json({status:'expired'});
+  const [id,proof]=pending.split('.');
+  const key=telegramLoginKey(id);
+  const stored=await bucket.get(key);
+  const login=stored && await stored.json();
+  if (!login || login.expires<=Date.now() || login.proof!==await hash(proof) || (login.attempts ?? 0)>=5) {
+    return json({status:'expired'});
+  }
+  const {code}=await request.json();
+  if (!login.telegramId || typeof code!=='string' || !/^[0-9]{6}$/.test(code)) return error('Введите шестизначный код из Telegram.');
+  if (login.code!==code) {
+    const result=await bucket.put(key,JSON.stringify({...login,attempts:(login.attempts ?? 0)+1}),
+      {onlyIf:{etagMatches:stored.etag}});
+    return result ? error('Неверный код. Проверьте сообщение в Telegram.') : error('Повторите ввод кода.',409);
+  }
+  const token=await hash('telegram-session:'+proof);
+  await write(bucket,await sessionKey(token),{telegramId:login.telegramId,expires:Date.now()+43200000});
+  await bucket.delete(key);
+  const headers=new Headers({'Cache-Control':'no-store'});
+  headers.append('Set-Cookie',cookie(url,'menu_session',token,43200));
+  headers.append('Set-Cookie',cookie(url,'menucase_telegram_login','',0));
+  return Response.json({status:'ok'},{headers});
+}
+
 async function registrationBot(request,env) {
   if (request.method!=='POST') return error('Действие не поддерживается.',405);
   const publicKey=env.REGISTRATION_BOT_PUBLIC_KEY?.trim();
@@ -122,6 +169,22 @@ async function registrationBot(request,env) {
   if (!valid) return error('Доступ запрещён.',403);
   const body=JSON.parse(raw);
   const bucket=env.BUCKET;
+
+  if (body.action==='login') {
+    if (typeof body.id!=='string' || !/^[a-f0-9]{32}$/.test(body.id) || !telegramIdValid(body.telegramId)) {
+      return error('Некорректный запрос.');
+    }
+    const id=telegramLoginKey(body.id);
+    const stored=await bucket.get(id);
+    const login=stored && await stored.json();
+    if (!login || login.expires<=Date.now()) return error('Ссылка для входа истекла.',410);
+    if ((login.attempts ?? 0)>=5) return error('Запросите новый код.',410);
+    if (login.telegramId) return login.telegramId===body.telegramId ? json({code:login.code}) : error('Запрос уже связан с другим аккаунтом.',409);
+    const entropy=crypto.getRandomValues(new Uint32Array(1))[0];
+    const code=String(Math.floor(entropy*1000000/4294967296)).padStart(6,'0');
+    const result=await bucket.put(id,JSON.stringify({...login,telegramId:body.telegramId,code}),{onlyIf:{etagMatches:stored.etag}});
+    return result ? json({code}) : error('Повторите команду /start.',409);
+  }
 
   if (body.action==='ack') {
     if (!slugValid(body.slug ?? '') || !['sent','failed'].includes(body.status)) return error('Некорректный запрос.');
@@ -182,6 +245,7 @@ async function api(request, url, env, sample) {
   const validVenue=isSample || slugValid(slug ?? '');
   const prefix='item/'+slug+'/';
   if (method !== 'GET' && request.headers.get('Origin') !== url.origin) return error('Запрос отклонён.',403);
+  if (route==='telegram-login') return telegramLogin(request,url,env,slug);
   if (route === 'restaurants' && method === 'GET' && validVenue) {
     const restaurant = venueSample ?? await read(bucket,'restaurant/'+slug);
     if (!restaurant || restaurant.enabled===false) return error('Меню ресторана временно недоступно.',404);
@@ -199,19 +263,22 @@ async function api(request, url, env, sample) {
   }
   const token = cookieValue(request,'menu_session');
   const session = token && /^[a-f0-9]{64}$/.test(token) && await read(bucket,await sessionKey(token));
-  const email = session?.expires > Date.now() ? gmail(session.email) : '';
-  const owner=Boolean(email && session.address===ownerAddress(env));
+  const active=session?.expires>Date.now() ? session : null;
+  const email=gmail(active?.email);
+  const telegramId=telegramIdValid(active?.telegramId) ? active.telegramId : '';
+  const identity=telegramId ? 'telegram:'+telegramId : email;
+  const owner=Boolean(email && active.address===ownerAddress(env));
   if (route === 'logout' && method === 'POST') {
     if (session) await bucket.delete(await sessionKey(token));
     return new Response('{}',{headers:{'Set-Cookie':cookie(url,'menu_session','',0),'Content-Type':'application/json'}});
   }
   if (route === 'me' && method === 'GET') {
-    const signed = Boolean(email);
-    const restaurants = signed ? (await all(bucket,'restaurant/')).filter(r=>owner || r.admins.includes(email)) : [];
+    const signed = Boolean(identity);
+    const restaurants = signed ? (await all(bucket,'restaurant/')).filter(r=>owner || r.admins.includes(identity)) : [];
     if (owner) restaurants.unshift({name:sample.name,slug:sample.slug,sample:true});
-    return json({email,verifiedEmail:email ? (session.address || email) : '',owner,configured:googleConfigured(env),restaurants:restaurants.map(r=>owner?r:{name:r.name,slug:r.slug,enabled:r.enabled!==false})});
+    return json({email,verifiedEmail:email ? (active.address || email) : '',telegramId,telegramConfigured:telegramLoginConfigured(env),owner,configured:googleConfigured(env),restaurants:restaurants.map(r=>owner?r:{name:r.name,slug:r.slug,enabled:r.enabled!==false})});
   }
-  if (!email) return error('Войдите с адресом @gmail.com.',401);
+  if (!identity) return error('Войдите через Google или Telegram.',401);
   if (route==='register' && method==='POST') {
     const body=await request.json();
     const name=String(body.name ?? '').trim();
@@ -224,8 +291,10 @@ async function api(request, url, env, sample) {
     if (!validName(firstName) || !validName(lastName)) return error('Укажите имя и фамилию до 60 символов.');
     const phone=typeof body.phone==='string' ? body.phone.trim() : '';
     if (!/^\+998[0-9]{9}$/.test(phone)) return error('Укажите 9 цифр номера после +998.');
-    const registrationContact={firstName,lastName,phone,email:session.address || email};
-    const venue={name,slug,admins:[email],enabled:false,registeredBy:email,registrationContact};
+    const contactEmail=email ? (active.address || email) : gmail(body.email) && body.email.trim().toLowerCase();
+    if (!contactEmail) return error('Укажите контактный адрес @gmail.com.');
+    const registrationContact={firstName,lastName,phone,email:contactEmail};
+    const venue={name,slug,admins:[identity],enabled:false,registeredBy:identity,registrationContact};
     const created=await bucket.put('restaurant/'+slug,JSON.stringify(venue),{onlyIf:{etagDoesNotMatch:'*'}});
     if (!created) return error('Этот адрес уже занят.',409);
     return json({restaurant:{name,slug,enabled:false}},201);
@@ -233,7 +302,7 @@ async function api(request, url, env, sample) {
   if (route==='billing' && validVenue) {
     if (!owner && method!=='GET') return error('Отмечать оплату может только системный администратор.',403);
     const venue=venueSample ?? await read(bucket,'restaurant/'+slug);
-    if (!owner && (isSample || !venue?.admins.includes(email))) return error('Нет доступа к этому ресторану.',403);
+    if (!owner && (isSample || !venue?.admins.includes(identity))) return error('Нет доступа к этому ресторану.',403);
     if (!venue) return error('Ресторан не найден.',404);
     return billing(request,bucket,slug,action);
   }
@@ -263,7 +332,7 @@ async function api(request, url, env, sample) {
       const updated=await bucket.put(key,JSON.stringify({...venue,enabled:body.enabled}),{onlyIf:{etagMatches:current.etag}});
       return updated ? json({enabled:body.enabled}) : error('Состояние изменилось. Обновите страницу.',409);
     }
-    const admin = gmail(body.email);
+    const admin=body.action==='revoke' && /^telegram:[1-9][0-9]{0,15}$/.test(body.email ?? '') ? body.email : gmail(body.email);
     if (!admin) return error('Укажите адрес @gmail.com.');
     if (body.action === 'create') {
       const name = String(body.name ?? '').trim();
@@ -281,7 +350,7 @@ async function api(request, url, env, sample) {
   }
   if (route !== 'manage' || !validVenue) return error('Страница не найдена.',404);
   const venue = venueSample ?? await read(bucket,'restaurant/'+slug);
-  if (!venue || (!owner && (isSample || !venue.admins.includes(email)))) return error('Нет доступа к этому ресторану.',403);
+  if (!venue || (!owner && (isSample || !venue.admins.includes(identity)))) return error('Нет доступа к этому ресторану.',403);
   if (method==='GET' && (action==='logo' || action==='photo' && idValid(id ?? ''))) {
     const asset=await bucket.get(action==='logo' ? 'logo/'+slug : 'photo/'+slug+'/'+id);
     return asset ? new Response(asset.body,{headers:{'Content-Type':asset.httpMetadata.contentType,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}}) : error('Изображение не найдено.',404);
