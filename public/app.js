@@ -427,14 +427,27 @@ function signInPanel() {
       input.pattern='[0-9]{6}';
       input.inputMode='numeric';
       input.autocomplete='one-time-code';
-      challenge.replaceChildren(element('p','Откройте бота и нажмите Start. Он пришлёт код в личный чат.'),open,
+      const fallback=element('details');
+      const startParameter=new URL(url).searchParams.get('start');
+      const command=field('Команда для личного чата с ботом','telegram-command',{value:'/start '+startParameter});
+      const commandInput=command.querySelector('input');
+      commandInput.readOnly=true;
+      commandInput.dir='ltr';
+      const copy=button('Скопировать команду',async()=>{
+        await navigator.clipboard.writeText(commandInput.value);
+        status.textContent='Команда скопирована. Отправьте её боту MenuCase.';
+      },'quiet');
+      fallback.append(element('summary','Бот ответил без кода?'),
+        element('p','Отправьте боту всю команду из поля ниже. Введите полученные шесть цифр в этой же вкладке.'),
+        command,copy);
+      challenge.replaceChildren(element('p','Откройте бота по кнопке ниже и нажмите Start в Telegram. Он пришлёт код в личный чат.'),open,
         form('Подтвердить вход',[code],async data=>{
           const {status:result}=await request('/api/telegram-login/complete',{
             method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:data.get('code')})
           });
           if (result==='expired') throw new Error('Время или попытки истекли. Запросите новый код.');
           location.reload();
-        }));
+        }),fallback);
       challenge.hidden=false;
       open.focus();
     } finally {
