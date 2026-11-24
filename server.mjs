@@ -14,6 +14,17 @@ const hash = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-2
 const sessionKey = async token => 'session/' + await hash(token);
 const idValid = value => /^[a-f0-9-]{36}$/.test(value);
 
+async function createRestaurant(bucket,reservedSlug,baseSlug,details) {
+  for (let number=1;number<=100;number++) {
+    const suffix=number===1 ? '' : '-'+number;
+    const slug=suffix ? baseSlug.slice(0,48-suffix.length).replace(/-+$/,'')+suffix : baseSlug;
+    if (slug===reservedSlug) continue;
+    const venue={...details,slug};
+    const created=await bucket.put('restaurant/'+slug,JSON.stringify(venue),{onlyIf:{etagDoesNotMatch:'*'}});
+    if (created) return venue;
+  }
+}
+
 async function all(bucket, prefix) {
   const results = [];
   let cursor;
@@ -295,10 +306,9 @@ async function api(request, url, env, sample) {
     const contactEmail=email ? (active.address || email) : gmail(body.email) && body.email.trim().toLowerCase();
     if (!contactEmail) return error('Укажите контактный адрес @gmail.com.');
     const registrationContact={firstName,lastName,phone,email:contactEmail};
-    const venue={name,slug,admins:[identity],enabled:false,registeredBy:identity,registrationContact};
-    const created=await bucket.put('restaurant/'+slug,JSON.stringify(venue),{onlyIf:{etagDoesNotMatch:'*'}});
-    if (!created) return error('Этот адрес уже занят.',409);
-    return json({restaurant:{name,slug,enabled:false}},201);
+    const venue=await createRestaurant(bucket,sample.slug,slug,{name,admins:[identity],enabled:false,registeredBy:identity,registrationContact});
+    if (!venue) return error('Не удалось подобрать адрес. Уточните название ресторана.',409);
+    return json({restaurant:{name,slug:venue.slug,enabled:false}},201);
   }
   if (route==='billing' && validVenue) {
     if (!owner && method!=='GET') return error('Отмечать оплату может только системный администратор.',403);
@@ -338,8 +348,8 @@ async function api(request, url, env, sample) {
     if (body.action === 'create') {
       const name = String(body.name ?? '').trim();
       if (!name || name.length > 100) return error('Укажите название до 100 символов.');
-      const created = await bucket.put(key,JSON.stringify({name,slug:body.slug,admins:[admin]}),{onlyIf:{etagDoesNotMatch:'*'}});
-      return created ? json({ok:true},201) : error('Этот адрес уже занят.',409);
+      const venue=await createRestaurant(bucket,sample.slug,body.slug,{name,admins:[admin]});
+      return venue ? json({ok:true,restaurant:{name,slug:venue.slug}},201) : error('Не удалось подобрать адрес. Уточните название ресторана.',409);
     }
     if (!['grant','revoke'].includes(body.action)) return error('Неизвестное действие.');
     const current = await bucket.get(key);
