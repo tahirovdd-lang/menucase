@@ -359,24 +359,22 @@ async function cabinet() {
   if (!me.email) {
     $('#admin-title').textContent='Вход в кабинет';
     const card=element('section','','admin-card');
-    card.append(element('p',me.gmailRequired ? 'Этот аккаунт не использует @gmail.com. Войдите с Gmail.' : 'Чтобы открыть кабинет, войдите с адресом @gmail.com.'));
-    if (me.siteLogin) {
-      const returnTo=location.pathname+location.search;
-      const signIn=link(me.gmailRequired ? 'Сменить аккаунт' : 'Войти через ChatGPT',me.gmailRequired ? '/signout-with-chatgpt?return_to='+encodeURIComponent(returnTo) : '/signin-with-chatgpt?return_to='+encodeURIComponent(returnTo));
-      signIn.target='_top';
-      signIn.className='admin-primary';
-      card.append(signIn);
-    } else if (me.configured) {
-      const signIn=link(t('signIn'),'/auth/google');
-      signIn.className='admin-primary';
-      card.append(signIn);
-    } else card.append(element('p','Подключение Google-входа ожидает настройки.'));
+    card.append(element('p','Чтобы открыть кабинет, войдите с адресом @gmail.com.'));
+    const signIn=link('Войти через Google','/auth/google');
+    signIn.className='admin-primary';
+    signIn.target='_top';
+    card.append(signIn);
+    if (!me.configured) {
+      signIn.removeAttribute('href');
+      signIn.setAttribute('aria-disabled','true');
+      card.append(element('p','Вход через Google станет доступен после настройки подключения.','admin-muted'));
+    }
     controls.append(card);
     return;
   }
   account.append(element('span',me.email,'admin-muted'),button(t('signOut'),async()=>{
     await request('/api/logout',{method:'POST'});
-    location.assign(me.siteSession ? '/signout-with-chatgpt?return_to=%2F' : cabinetUrl());
+    location.assign(cabinetUrl());
   },'quiet'));
 
   const venue=me.restaurants.find(entry=>entry.slug===adminParams.get('venue'));
