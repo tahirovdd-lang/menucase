@@ -282,6 +282,22 @@ async function api(request, url, env, sample) {
     const stored=action==='new' ? null : await bucket.get(key);
     const previous=stored ? await stored.json() : venueSample?.entries.get(itemId);
     if (action !== 'new' && (!previous || previous.deleted)) return error('Позиция не найдена.',404);
+    const nutrition={...previous?.nutrition};
+    for (const [nutrient,limit] of Object.entries({calories:1000,protein:100,fat:100,carbs:100})) {
+      const raw=form.get('nutrition-'+nutrient);
+      if (raw===null) continue;
+      if (typeof raw!=='string') return error('Проверьте значения КБЖУ на 100 г.');
+      const value=raw.trim();
+      if (!value) {
+        delete nutrition[nutrient];
+        continue;
+      }
+      const amount=Number(value.replace(',','.'));
+      if (!/^[0-9]{1,4}([.,][0-9]{1,2})?$/.test(value) || amount>limit) {
+        return error('Укажите на 100 г от 0 до 1000 ккал и от 0 до 100 г для белков, жиров и углеводов.');
+      }
+      nutrition[nutrient]=amount;
+    }
     const file = form.get('photo');
     let photoId = previous?.photoId ?? '';
     if (file instanceof File && file.size) {
@@ -292,6 +308,7 @@ async function api(request, url, env, sample) {
       await bucket.put('photo/'+slug+'/'+photoId,file.stream(),{httpMetadata:{contentType:type}});
     }
     const item = {id:itemId,name,description,category,price,markers,photoId,created:previous?.created ?? Date.now(),photo:photoId ? '/api/restaurants/'+slug+'/photo/'+photoId : (previous?.photo ?? '')};
+    if (Object.keys(nutrition).length) item.nutrition=nutrition;
     if (isSample) {
       item.section=section;
       item.illustration=Boolean(!photoId && previous?.illustration);
