@@ -57,3 +57,26 @@ export const sectionTranslations=Object.fromEntries(Object.entries(sectionLabels
   if (names.length!==sectionKeys.length) throw new Error('Incomplete menu sections: '+code);
   return [code,Object.fromEntries(sectionKeys.map((key,index)=>[key,names[index]]))];
 }));
+
+export const nutritionLabels={
+  ru:['Пищевая ценность','Калории','Белки','Жиры','Углеводы','ккал'],
+  uz:['Ozuqaviy qiymati','Kaloriya','Oqsillar','Yogʻlar','Uglevodlar','kkal'],
+  en:['Nutrition','Calories','Protein','Fat','Carbohydrates','kcal'],
+  it:['Valori nutrizionali','Calorie','Proteine','Grassi','Carboidrati','kcal'],
+  es:['Información nutricional','Calorías','Proteínas','Grasas','Carbohidratos','kcal'],
+  fr:['Valeurs nutritionnelles','Calories','Protéines','Lipides','Glucides','kcal'],
+  de:['Nährwerte','Kalorien','Eiweiß','Fett','Kohlenhydrate','kcal'],
+  pt:['Informação nutricional','Calorias','Proteínas','Gorduras','Carboidratos','kcal'],
+  tr:['Besin değeri','Kalori','Protein','Yağ','Karbonhidrat','kcal'],
+  kk:['Тағамдық құндылығы','Калория','Ақуыздар','Майлар','Көмірсулар','ккал'],
+  ky:['Азыктык баалуулугу','Калория','Белоктор','Майлар','Углеводдор','ккал'],
+  tg:['Арзиши ғизоӣ','Калория','Сафедаҳо','Равғанҳо','Карбогидратҳо','ккал'],
+  az:['Qida dəyəri','Kalori','Zülallar','Yağlar','Karbohidratlar','kkal'],
+  ar:['القيمة الغذائية','السعرات الحرارية','البروتين','الدهون','الكربوهيدرات','كيلوكالوري'],
+  zh:['营养成分','热量','蛋白质','脂肪','碳水化合物','千卡'],
+  ja:['栄養成分','エネルギー','たんぱく質','脂質','炭水化物','kcal'],
+  ko:['영양 정보','열량','단백질','지방','탄수화물','kcal'],
+  hi:['पोषण मूल्य','कैलोरी','प्रोटीन','वसा','कार्बोहाइड्रेट','किलो कैलोरी'],
+  uk:['Поживна цінність','Калорії','Білки','Жири','Вуглеводи','ккал'],
+  pl:['Wartość odżywcza','Kalorie','Białko','Tłuszcz','Węglowodany','kcal']
+};
