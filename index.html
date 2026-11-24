@@ -1,16 +1,22 @@
 <!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MenuCase — электронное меню</title>
-  <link rel="canonical" href="https://menu-scene-3d.giftedmodel4.chatgpt.site/">
-  <meta http-equiv="refresh" content="0; url=https://menu-scene-3d.giftedmodel4.chatgpt.site/">
-</head>
-<body>
-  <main>
-    <h1>MenuCase</h1>
-    <a href="https://menu-scene-3d.giftedmodel4.chatgpt.site/">Открыть электронное меню</a>
-  </main>
-</body>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Интерактивное меню блюд и напитков">
+<title>На столе · Интерактивное меню</title>
+<link rel="stylesheet" href="./public/style.css">
+<header><a class="brand" href="./" aria-label="MenuCase"><span class="brand-icon" aria-hidden="true"></span></a><div class="header-actions"><div class="language-picker"><img id="language-flag" alt="" width="20" height="15"><span id="language-code" aria-hidden="true">RU</span><select id="language" aria-label="Язык"></select></div></div></header>
+<main>
+  <div class="top"><div class="menu-heading"><h1 id="restaurant">MenuCase</h1><p id="menu-title"></p></div><nav id="filters" aria-label="Разделы меню"></nav></div>
+  <nav id="subcategories" aria-label="Подкатегории блюд" hidden></nav>
+  <section class="stage" aria-label="Витрина меню" hidden>
+    <div id="rail" class="rail"></div>
+    <button class="step previous" id="previous" aria-label="Предыдущая позиция">‹</button>
+    <button class="step next" id="next" aria-label="Следующая позиция">›</button>
+  </section>
+  <section id="details" aria-live="polite" hidden></section>
+  <section id="directory" class="menu-directory" hidden></section>
+  <div id="menu-qr" class="menu-directory"></div>
+</main>
+<script type="module" src="./public/pages.js"></script>
 </html>
