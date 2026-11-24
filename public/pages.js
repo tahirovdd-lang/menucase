@@ -44,13 +44,12 @@ const t = key => languages[languageCode].strings[key];
 const sectionName=section=>sectionTranslations[languageCode]?.[section] ?? sectionTranslations.ru[section];
 const regions={en:'gb',ar:'sa',ja:'jp',ko:'kr',zh:'cn',hi:'in',uk:'ua',kk:'kz',ky:'kg',tg:'tj'};
 const regionFor = code => regions[code] ?? code;
-const emojiFlag = region => String.fromCodePoint(...[...region.toUpperCase()].map(letter=>127397+letter.charCodeAt(0)));
 for (const [code,language] of Object.entries(languages)) {
   const option = document.createElement('option');
   option.value = code;
   option.lang = code;
   option.dir = language.direction;
-  option.textContent = emojiFlag(regionFor(code))+' '+code.toUpperCase()+' · '+language.name;
+  option.textContent = language.name;
   selector.append(option);
 }
 const requestedSection=menuParams.get('section');
@@ -390,7 +389,6 @@ function applyLanguage() {
   document.documentElement.lang=languageCode;
   document.documentElement.dir=selected.direction;
   selector.value=languageCode;
-  $('#language-code').textContent=languageCode.toUpperCase();
   $('#language-flag').src=flags[regionFor(languageCode)];
   selector.setAttribute('aria-label',t('language'));
   if (slug===null) {
