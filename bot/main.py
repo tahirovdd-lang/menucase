@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import time
 from base64 import b64encode
 from pathlib import Path
@@ -134,6 +135,28 @@ def notify_registrations(token, key):
             time.sleep(20)
 
 
+def login_reply(message, key):
+    chat = message.get("chat", {})
+    sender = message.get("from", {})
+    text = message.get("text", "")
+    match = re.fullmatch(r"/start(?:@[A-Za-z0-9_]+)? mc_([a-f0-9]{32})", text)
+    if chat.get("type") != "private" or not match or chat.get("id") != sender.get("id"):
+        return start_reply(message)
+    try:
+        result = registration_request(key, {
+            "action": "login", "id": match.group(1), "telegramId": str(sender["id"]),
+        })
+        reply = f"Код входа в MenuCase: {result['code']}\nВведите его на сайте. Никому не пересылайте код."
+    except HTTPError as error:
+        if error.code in {409, 410}:
+            reply = "Запрос уже использован или истёк. Получите новый код на сайте."
+        else:
+            reply = "Вход через Telegram временно недоступен. Попробуйте позже."
+    except (URLError, TimeoutError, ValueError):
+        reply = "Сайт временно недоступен. Попробуйте ещё раз."
+    return {"chat_id": chat["id"], "text": reply}
+
+
 def run():
     token = (os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
     if not token:
@@ -141,6 +164,12 @@ def run():
     key = registration_key()
     public_key = b64encode(key.public_key().public_bytes_raw()).decode()
     LOGGER.info("MENUCASE_PUBLIC_KEY=%s", public_key)
+    try:
+        username = telegram(token, "getMe", {}).get("username")
+        if username:
+            LOGGER.info("MENUCASE_TELEGRAM_BOT_USERNAME=%s", username)
+    except (TelegramError, URLError, TimeoutError, ValueError):
+        LOGGER.warning("Не удалось получить имя бота от Telegram.")
     Thread(target=notify_registrations, args=(token, key), daemon=True).start()
     offset = 0
     while True:
@@ -149,7 +178,7 @@ def run():
                 "offset": offset, "timeout": 25, "allowed_updates": ["message"],
             })
             for update in updates:
-                reply = start_reply(update.get("message", {}))
+                reply = login_reply(update.get("message", {}), key)
                 if reply:
                     try:
                         telegram(token, "sendMessage", reply)
