@@ -178,3 +178,7 @@ form{display:grid;gap:12px;margin:1rem 0}label{display:grid;gap:.35rem;color:var
 .nutrition-values div{border:1px solid #ffffff36;border-radius:12px;padding:.6rem .75rem}
 .nutrition-values dt{color:var(--muted)}
 .nutrition-values dd{margin:.2rem 0 0;font-weight:600}
+
+.registration-phone{display:flex;align-items:center;gap:.5rem;direction:ltr}
+.registration-phone span{font-weight:700;color:var(--ink)}
+.registration-phone input{min-inline-size:0;flex:1}
