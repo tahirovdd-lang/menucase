@@ -51,7 +51,7 @@ def start_reply(message):
         return None
     return {
         "chat_id": message["chat"]["id"],
-        "text": "MenuCase — служебный бот для уведомлений о новых ресторанах.",
+        "text": "Чтобы получить код для входа, начните вход через Telegram в кабинете MenuCase. Если бот открылся без кода, отправьте команду целиком из подсказки «Бот ответил без кода?».",
     }
 
 
@@ -145,7 +145,7 @@ def login_reply(message, key):
     chat = message.get("chat", {})
     sender = message.get("from", {})
     text = message.get("text", "")
-    match = re.fullmatch(r"/start(?:@[A-Za-z0-9_]+)? mc_([a-f0-9]{32})", text)
+    match = re.fullmatch(r"/start(?:@[A-Za-z0-9_]+)? mc_([a-f0-9]{32})", text.strip())
     if chat.get("type") != "private" or not match or chat.get("id") != sender.get("id"):
         return start_reply(message)
     try:
