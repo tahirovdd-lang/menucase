@@ -735,7 +735,7 @@ function showAccess(venue,content) {
   }
   if (venue.registeredBy) content.append(button('Повторить уведомление в Telegram',async()=>{
     const result=await admin('notify',{slug:venue.slug});
-    const messages={sent:'Уведомление отправлено.',sending:'Уведомление отправляется.',failed:'Telegram вернул ошибку доставки.',pending:'Настройки Telegram ещё не подключены.'};
+    const messages={sent:'Уведомление отправлено.',sending:'Уведомление отправляется.',queued:'Уведомление ожидает отправки ботом.',pending:'Бот уведомлений ещё не подключён.'};
     status.textContent=messages[result.status];
   },'quiet'));
   for (const email of venue.admins) content.append(row(element('span',email),button('Отозвать',async()=>{
