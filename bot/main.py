@@ -5,7 +5,6 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-SITE = "https://menu-scene-3d.giftedmodel4.chatgpt.site"
 LOGGER = logging.getLogger("menucase")
 
 
@@ -39,11 +38,7 @@ def start_reply(message):
         return None
     return {
         "chat_id": message["chat"]["id"],
-        "text": "MenuCase — электронное меню для ресторанов. Откройте меню или войдите в кабинет.",
-        "reply_markup": {"inline_keyboard": [
-            [{"text": "Открыть меню", "url": SITE + "/"}],
-            [{"text": "Кабинет ресторана", "url": SITE + "/admin"}],
-        ]},
+        "text": "MenuCase — служебный бот для уведомлений о новых ресторанах.",
     }
 
 
