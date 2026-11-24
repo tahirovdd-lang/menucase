@@ -135,10 +135,10 @@ form{display:grid;gap:12px;margin:1rem 0}label{display:grid;gap:.35rem;color:var
   .admin-thumb{width:48px;height:48px}
 }
 
-.sample-menu .brand img{width:60px;height:60px;max-height:none;border-radius:50%}
-.sample-menu .top{display:block;text-align:center}
-.sample-menu #filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(.4rem,4vw,3rem);width:min(100%,820px);margin:1.5rem auto 0;overflow:visible}
-.sample-menu #filters .featured-category{display:grid;justify-items:center;align-content:start;gap:clamp(.65rem,2vw,1.15rem);min-width:0;padding:0;border:0;border-radius:16px;background:transparent;color:var(--ink);white-space:normal}
+.restaurant-menu .brand img{width:60px;height:60px;max-height:none;border-radius:50%}
+.restaurant-menu .top{display:block;text-align:center}
+.restaurant-menu #filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(.4rem,4vw,3rem);width:min(100%,820px);margin:1.5rem auto 0;overflow:visible}
+.restaurant-menu #filters .featured-category{display:grid;justify-items:center;align-content:start;gap:clamp(.65rem,2vw,1.15rem);min-width:0;padding:0;border:0;border-radius:16px;background:transparent;color:var(--ink);white-space:normal}
 .featured-category-label{display:grid;place-items:center;width:100%;min-height:2.7em;padding:.45em .15em;border:1px solid #ffffff46;border-radius:999px;background:#191b16;font-size:clamp(.875rem,3vw,1.75rem);line-height:1.15;overflow-wrap:anywhere}
 .featured-category:is(:hover,[aria-pressed=true]) .featured-category-label{background:var(--accent);border-color:var(--accent);color:#192016}
 .featured-category-circle{display:block;width:min(100%,210px);aspect-ratio:1;overflow:hidden;border:1px solid #ffffff3d;border-radius:50%;background:#262921;box-shadow:0 12px 28px #0007}
@@ -151,10 +151,9 @@ form{display:grid;gap:12px;margin:1rem 0}label{display:grid;gap:.35rem;color:var
 #subcategories:not([hidden]){display:flex;flex-wrap:wrap;justify-content:center;gap:.5rem;margin:1.15rem max(5vw,20px) 0;padding:.85rem 0;border-top:1px solid #ffffff25}
 #subcategories button{background:#22261d;border:1px solid #ffffff35;color:var(--ink);font-size:.875rem;padding:.55rem .8rem}
 #subcategories button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#192016}
-.sample-menu .card-visual:not(:has(img)){display:grid;place-items:center;background:radial-gradient(circle,#3a4432 0 64%,#4e5943 65% 67%,#282e22 68%)}
-.sample-menu .card-visual:not(:has(img)) span{position:static;display:block;max-width:74%;padding:0;text-align:center;background:none;font-size:clamp(.85rem,1.7vw,1.3rem);overflow-wrap:anywhere}
-.sample-menu .dish-layout:has(.dish-copy:only-child){grid-template-columns:minmax(0,740px)}
-.sample-photo-note{font-size:.875rem}
+.restaurant-menu .card-visual:not(:has(img)){display:grid;place-items:center;background:radial-gradient(circle,#3a4432 0 64%,#4e5943 65% 67%,#282e22 68%)}
+.restaurant-menu .card-visual:not(:has(img)) span{position:static;display:block;max-width:74%;padding:0;text-align:center;background:none;font-size:clamp(.85rem,1.7vw,1.3rem);overflow-wrap:anywhere}
+.restaurant-menu .dish-layout:has(.dish-copy:only-child){grid-template-columns:minmax(0,740px)}
 
 .admin-toolbar input[type=search]{width:min(100%,270px)}
 .admin-editor label[hidden]{display:none}
