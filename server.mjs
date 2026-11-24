@@ -135,7 +135,8 @@ async function telegramLogin(request,url,env,action) {
     return json({status:'expired'});
   }
   const {code}=await request.json();
-  if (!login.telegramId || typeof code!=='string' || !/^[0-9]{6}$/.test(code)) return error('Введите шестизначный код из Telegram.');
+  if (!login.telegramId) return error('Бот ещё не получил запрос. Откройте подсказку «Бот ответил без кода?» и отправьте команду.');
+  if (typeof code!=='string' || !/^[0-9]{6}$/.test(code)) return error('Введите шестизначный код из Telegram.');
   if (login.code!==code) {
     const result=await bucket.put(key,JSON.stringify({...login,attempts:(login.attempts ?? 0)+1}),
       {onlyIf:{etagMatches:stored.etag}});
