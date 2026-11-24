@@ -192,8 +192,10 @@ async function api(request, url, env, sample) {
     return json({restaurant:{name,slug,enabled:false}},201);
   }
   if (route==='billing' && validVenue) {
-    if (!owner) return error('Требуется доступ системного администратора.',403);
-    if (!isSample && !(await read(bucket,'restaurant/'+slug))) return error('Ресторан не найден.',404);
+    if (!owner && method!=='GET') return error('Отмечать оплату может только системный администратор.',403);
+    const venue=venueSample ?? await read(bucket,'restaurant/'+slug);
+    if (!owner && (isSample || !venue?.admins.includes(email))) return error('Нет доступа к этому ресторану.',403);
+    if (!venue) return error('Ресторан не найден.',404);
     return billing(request,bucket,slug,action);
   }
   if (route === 'admin' && method === 'POST') {
