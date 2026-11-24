@@ -508,19 +508,47 @@ async function cabinet() {
   }
   if (me.owner && rows.length) filterVenues();
   controls.append(venues);
-  const registration=element('section','','admin-card');
-  registration.append(element('h2','Подключить ресторан'),
-    element('p','После регистрации можно заполнить меню. Системный администратор включит его для гостей.','admin-muted'),
-    form('Зарегистрировать ресторан',[
-      field('Название ресторана','name',{maxlength:100}),
-      field('Адрес меню','slug',{maxlength:48,placeholder:'например, basil-kitchen'})
-    ],async data=>{
-      const {restaurant:entry}=await request('/api/register',{
-        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(data))
-      });
-      location.assign(cabinetUrl(entry));
-    }));
-  if (!me.owner) controls.append(registration);
+  if (!me.owner) {
+    const registration=element('section','','admin-card');
+    const lastName=field('Фамилия','lastName',{maxlength:60});
+    lastName.querySelector('input').autocomplete='family-name';
+    const firstName=field('Имя','firstName',{maxlength:60});
+    firstName.querySelector('input').autocomplete='given-name';
+    const phone=field('Номер телефона','phone',{type:'tel',placeholder:'90 123 45 67'});
+    const phoneInput=phone.querySelector('input');
+    phoneInput.inputMode='tel';
+    phoneInput.autocomplete='tel-national';
+    phoneInput.pattern='[0-9]{9}';
+    phoneInput.title='Девять цифр после +998';
+    const phoneGroup=element('span','','registration-phone');
+    phoneGroup.append(element('span','+998'),phoneInput);
+    phone.append(phoneGroup);
+    phoneInput.oninput=()=>{
+      const value=phoneInput.value.trim();
+      const digits=value.replace(/[^0-9]/g,'');
+      phoneInput.value=value.startsWith('+998') || (digits.length===12 && digits.startsWith('998'))
+        ? digits.slice(3) : digits;
+    };
+    const email=field('Подтверждённая почта','email',{type:'email',value:me.verifiedEmail || me.email});
+    email.querySelector('input').readOnly=true;
+    registration.append(element('h2','Подключить ресторан'),
+      element('p','После регистрации можно заполнить меню. Системный администратор включит его для гостей.','admin-muted'),
+      form('Зарегистрировать ресторан',[
+        lastName,firstName,phone,email,
+        field('Название ресторана','name',{maxlength:100}),
+        field('Адрес меню','slug',{maxlength:48,placeholder:'например, basil-kitchen'}),
+        element('p','При регистрации имя, фамилия, телефон и почта передаются системному администратору в Telegram.','admin-muted')
+      ],async data=>{
+        const details=Object.fromEntries(data);
+        details.phone='+998'+details.phone;
+        delete details.email;
+        const {restaurant:entry}=await request('/api/register',{
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(details)
+        });
+        location.assign(cabinetUrl(entry));
+      }));
+    controls.append(registration);
+  }
   if (me.owner) {
     const create=element('section','','admin-card');
     create.append(element('h2','Новый ресторан'),form('Создать ресторан',[
@@ -697,6 +725,13 @@ function showAccess(venue,content) {
   if (venue.sample || !me.owner) {
     content.append(element('p',venue.sample ? 'Меню The MOHON доступно для редактирования владельцу сайта.' : 'Доступом управляет владелец платформы.','admin-muted'));
     return;
+  }
+  if (venue.registrationContact) {
+    const {lastName,firstName,phone,email}=venue.registrationContact;
+    content.append(element('h3','Контакт при регистрации'),
+      element('p',lastName+' '+firstName),
+      element('p',phone),
+      element('p',email));
   }
   if (venue.registeredBy) content.append(button('Повторить уведомление в Telegram',async()=>{
     const result=await admin('notify',{slug:venue.slug});
