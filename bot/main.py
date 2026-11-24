@@ -18,9 +18,10 @@ REGISTRATION_API = "https://menu-scene-3d.giftedmodel4.chatgpt.site/api/registra
 
 
 class TelegramError(Exception):
-    def __init__(self, status, retry_after=0):
+    def __init__(self, status, retry_after=0, description=''):
         self.status = status
         self.retry_after = retry_after
+        self.description = description
 
 
 def telegram(token, method, payload):
@@ -36,7 +37,10 @@ def telegram(token, method, payload):
         with error:
             result = json.load(error)
     if not result.get("ok"):
-        raise TelegramError(result.get("error_code"), result.get("parameters", {}).get("retry_after", 0))
+        raise TelegramError(
+            result.get("error_code"), result.get("parameters", {}).get("retry_after", 0),
+            str(result.get("description", "")),
+        )
     return result["result"]
 
 
@@ -190,8 +194,18 @@ def run():
         except TelegramError as error:
             if error.status in {401, 404}:
                 raise SystemExit("Telegram отклонил токен бота.") from None
-            LOGGER.warning("Telegram API: %s", error.status)
-            time.sleep(max(5, error.retry_after))
+            if error.status == 409:
+                reason = error.description.lower()
+                if "webhook" in reason:
+                    LOGGER.warning("Telegram 409: активен webhook, поэтому getUpdates недоступен.")
+                elif "other getupdates" in reason:
+                    LOGGER.warning("Telegram 409: другой процесс уже вызывает getUpdates для этого бота.")
+                else:
+                    LOGGER.warning("Telegram 409: конфликт при получении обновлений.")
+                time.sleep(max(30, error.retry_after))
+            else:
+                LOGGER.warning("Telegram API: %s", error.status)
+                time.sleep(max(5, error.retry_after))
         except (URLError, TimeoutError, ValueError):
             LOGGER.warning("Временная ошибка соединения с Telegram.")
             time.sleep(5)
