@@ -14,7 +14,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 
 LOGGER = logging.getLogger("menucase")
-REGISTRATION_API = "https://menu-scene-3d.giftedmodel4.chatgpt.site/api/registration-bot"
+MENUCASE_SITE_URL = os.getenv(
+    "MENUCASE_SITE_URL", "https://menu-scene-3d.giftedmodel4.chatgpt.site"
+).strip().rstrip("/")
+REGISTRATION_API = MENUCASE_SITE_URL + "/api/registration-bot"
 
 
 class TelegramError(Exception):
