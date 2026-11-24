@@ -1,0 +1,14 @@
+{
+  "name": "menucase",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-11-24",
+  "build": {
+    "command": "node build.mjs"
+  },
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "menucase-data"
+    }
+  ]
+}
