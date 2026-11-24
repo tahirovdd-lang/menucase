@@ -92,6 +92,17 @@ function menuLogo(slug,uploaded,sample) {
 const monthValid = value => typeof value==='string' && /^[1-9][0-9]{3}-(0[1-9]|1[0-2])$/.test(value);
 const noticeKey = slug => 'registration-notice/'+slug;
 
+function registrationMessage(venue) {
+  const contact=venue.registrationContact;
+  return [
+    'Новая регистрация · MenuCase',
+    'Ресторан: '+venue.name,
+    'Адрес меню: /r/'+venue.slug,
+    ...(contact ? ['Фамилия: '+contact.lastName,'Имя: '+contact.firstName,'Телефон: '+contact.phone] : []),
+    'Почта: '+(contact?.email ?? venue.registeredBy)
+  ].join('\n');
+}
+
 async function sendRegistrationNotice(env,venue) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_ADMIN_CHAT_ID) return 'pending';
   const bucket=env.BUCKET;
@@ -111,7 +122,7 @@ async function sendRegistrationNotice(env,venue) {
       signal:AbortSignal.timeout(8000),
       body:JSON.stringify({
         chat_id:env.TELEGRAM_ADMIN_CHAT_ID,
-        text:['Новый ресторан · На столе',venue.name,'Адрес меню: /r/'+venue.slug,'Gmail: '+venue.registeredBy].join('\n')
+        text:registrationMessage(venue)
       })
     });
     if (response.ok && (await response.json()).ok) status='sent';
@@ -176,7 +187,7 @@ async function api(request, url, env, sample) {
     const signed = Boolean(email);
     const restaurants = signed ? (await all(bucket,'restaurant/')).filter(r=>owner || r.admins.includes(email)) : [];
     if (owner) restaurants.unshift({name:sample.name,slug:sample.slug,sample:true});
-    return json({email,owner,configured:googleConfigured(env),restaurants:restaurants.map(r=>owner?r:{name:r.name,slug:r.slug,enabled:r.enabled!==false})});
+    return json({email,verifiedEmail:email ? (session.address || email) : '',owner,configured:googleConfigured(env),restaurants:restaurants.map(r=>owner?r:{name:r.name,slug:r.slug,enabled:r.enabled!==false})});
   }
   if (!email) return error('Войдите с адресом @gmail.com.',401);
   if (route==='register' && method==='POST') {
@@ -185,7 +196,14 @@ async function api(request, url, env, sample) {
     const slug=String(body.slug ?? '').trim().toLowerCase();
     if (!name || name.length>100) return error('Укажите название до 100 символов.');
     if (!slugValid(slug)) return error('Адрес должен содержать строчные латинские буквы, цифры и дефисы.');
-    const venue={name,slug,admins:[email],enabled:false,registeredBy:email};
+    const firstName=typeof body.firstName==='string' ? body.firstName.trim() : '';
+    const lastName=typeof body.lastName==='string' ? body.lastName.trim() : '';
+    const validName=value=>value.length<=60 && /\p{L}/u.test(value) && !/[\p{Cc}\p{Cf}]/u.test(value);
+    if (!validName(firstName) || !validName(lastName)) return error('Укажите имя и фамилию до 60 символов.');
+    const phone=typeof body.phone==='string' ? body.phone.trim() : '';
+    if (!/^\+998[0-9]{9}$/.test(phone)) return error('Укажите 9 цифр номера после +998.');
+    const registrationContact={firstName,lastName,phone,email:session.address || email};
+    const venue={name,slug,admins:[email],enabled:false,registeredBy:email,registrationContact};
     const created=await bucket.put('restaurant/'+slug,JSON.stringify(venue),{onlyIf:{etagDoesNotMatch:'*'}});
     if (!created) return error('Этот адрес уже занят.',409);
     await sendRegistrationNotice(env,venue).catch(()=>{});
