@@ -164,3 +164,5 @@ form{display:grid;gap:12px;margin:1rem 0}label{display:grid;gap:.35rem;color:var
 .billing-days button{min-height:2.4rem;padding:.3rem}
 .billing-days button[aria-pressed=true]{background:var(--accent);color:#181a11}
 .admin-card input[type=month]{max-width:235px}
+
+.venue-row[hidden]{display:none}
