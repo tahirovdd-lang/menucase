@@ -1,6 +1,7 @@
 import {languages,nutritionLabels,sectionTranslations} from './languages.js';
 import {flags} from './flags.js';
 import {mohonSlug,mohonName,mohonSections} from './mohon-menu.js';
+import {qrMatrix} from './qr-encoder.js';
 
 const $ = selector => document.querySelector(selector);
 const controls = $('#controls');
@@ -371,6 +372,15 @@ function field(text,name,{type='text',value='',required=true,maxlength,placehold
   label.append(control);
   return label;
 }
+const cyrillicLetters='абвгдеёжзийклмнопрстуфхцчшщъыьэюяўқғҳҷӣӯєіїґ';
+const latinLetters='a b v g d e yo zh z i y k l m n o p r s t u f kh ts ch sh shch  y  e yu ya o q g h j i u ye i yi g'.split(' ');
+
+function restaurantSlug(name) {
+  const transliterated=name.toLowerCase().replace(/[а-яёўқғҳҷӣӯєіїґ]/g,letter=>latinLetters[cyrillicLetters.indexOf(letter)]);
+  return transliterated.normalize('NFKD').replace(/[\p{M}'’ʻʼ`]/gu,'')
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-+/,'').slice(0,48).replace(/-+$/,'') || 'menu';
+}
+
 function form(label,fields,submit) {
   const node = element('form');
   const save = element('button',label);
@@ -588,11 +598,11 @@ async function cabinet() {
       element('p','После регистрации можно заполнить меню. Системный администратор включит его для гостей.','admin-muted'),
       form('Зарегистрировать ресторан',[
         lastName,firstName,phone,email,
-        field('Название ресторана','name',{maxlength:100}),
-        field('Адрес меню','slug',{maxlength:48,placeholder:'например, basil-kitchen'})
+        field('Название ресторана','name',{maxlength:100})
       ],async data=>{
         const details=Object.fromEntries(data);
         details.phone='+998'+details.phone;
+        details.slug=restaurantSlug(details.name);
         const {restaurant:entry}=await request('/api/register',{
           method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(details)
         });
@@ -603,13 +613,13 @@ async function cabinet() {
   if (me.owner) {
     const create=element('section','','admin-card');
     create.append(element('h2','Новый ресторан'),form('Создать ресторан',[
-      field('Название','name',{maxlength:100}),
-      field('Адрес ресторана','slug',{maxlength:48,placeholder:'например, basil-kitchen'}),
+      field('Название ресторана','name',{maxlength:100}),
       field('Gmail администратора','email',{type:'email'})
     ],async data=>{
       const details=Object.fromEntries(data);
-      await admin('create',details);
-      location.assign(cabinetUrl(details));
+      details.slug=restaurantSlug(details.name);
+      const {restaurant:entry}=await admin('create',details);
+      location.assign(cabinetUrl(entry));
     }));
     controls.append(create);
   }
@@ -817,6 +827,35 @@ function categorySelect() {
   return select;
 }
 
+function menuQrCard(venue) {
+  const url=new URL(venue.sample ? '/' : '/r/'+venue.slug,location.origin).href;
+  const matrix=qrMatrix(url);
+  const margin=4;
+  const scale=12;
+  const canvas=element('canvas');
+  canvas.width=canvas.height=(matrix.length+2*margin)*scale;
+  const context=canvas.getContext('2d');
+  context.fillStyle='#fff';
+  context.fillRect(0,0,canvas.width,canvas.height);
+  context.fillStyle='#000';
+  matrix.forEach((line,y)=>line.forEach((dark,x)=>{
+    if (dark) context.fillRect((x+margin)*scale,(y+margin)*scale,scale,scale);
+  }));
+  const image=element('img');
+  image.alt='QR-код меню '+venue.name;
+  image.src=canvas.toDataURL('image/png');
+  const download=link('Скачать QR-код',image.src);
+  download.download=venue.slug+'-menu-qr.png';
+  download.className='admin-primary';
+  const description=element('div','','admin-menu-qr-copy');
+  description.append(element('h3','QR-код меню'),link(url,url));
+  if (venue.enabled===false) description.append(element('p','Гости смогут открыть меню после его включения.','admin-muted'));
+  description.append(download);
+  const card=element('section','','admin-menu-qr');
+  card.append(image,description);
+  return card;
+}
+
 async function manageMenu(venue,content) {
   const endpoint='/api/manage/'+venue.slug;
   let {items:entries}=await request(endpoint);
@@ -842,7 +881,8 @@ async function manageMenu(venue,content) {
   toolbar.append(filter);
   if (venue.sample) toolbar.append(search);
   toolbar.append(add);
-  content.append(element('h2','Меню'),toolbar,editor,list);
+  const qr=element('div');
+  content.append(element('h2','Меню'),toolbar,editor,list,qr);
   filter.onchange=drawEntries;
   search.oninput=drawEntries;
   drawEntries();
@@ -903,6 +943,8 @@ async function manageMenu(venue,content) {
   }
 
   function drawEntries() {
+    if (!entries.length) qr.replaceChildren();
+    else if (!qr.firstChild) qr.append(menuQrCard(venue));
     list.replaceChildren();
     const query=search.value.trim().toLowerCase();
     const visible=entries.filter(entry=>(!filter.value || entry.category===filter.value) && entry.name.toLowerCase().includes(query));
