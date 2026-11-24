@@ -103,34 +103,55 @@ function registrationMessage(venue) {
   ].join('\n');
 }
 
-async function sendRegistrationNotice(env,venue) {
-  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_ADMIN_CHAT_ID) return 'pending';
+async function registrationBot(request,env) {
+  if (request.method!=='POST') return error('Действие не поддерживается.',405);
+  const publicKey=env.REGISTRATION_BOT_PUBLIC_KEY?.trim();
+  const chatId=env.TELEGRAM_ADMIN_CHAT_ID?.trim();
+  if (!publicKey || !chatId) return error('Бот уведомлений ещё не подключён.',503);
+  const timestamp=request.headers.get('X-MenuCase-Time') ?? '';
+  const signature=request.headers.get('X-MenuCase-Signature') ?? '';
+  const length=Number(request.headers.get('Content-Length'));
+  if (!/^[0-9]{10}$/.test(timestamp) || Math.abs(Date.now()/1000-Number(timestamp))>60 ||
+      !/^[A-Za-z0-9+/]{86}==$/.test(signature) || length<2 || length>8192) return error('Доступ запрещён.',403);
+  const raw=await request.text();
+  if (encoder.encode(raw).length!==length) return error('Некорректный запрос.');
+  const decode=value=>Uint8Array.from(atob(value),character=>character.charCodeAt(0));
+  const key=await crypto.subtle.importKey('raw',decode(publicKey),'Ed25519',false,['verify']);
+  const valid=await crypto.subtle.verify('Ed25519',key,decode(signature),
+    encoder.encode('MenuCase registration v1\n'+timestamp+'\n'+raw));
+  if (!valid) return error('Доступ запрещён.',403);
+  const body=JSON.parse(raw);
   const bucket=env.BUCKET;
-  const key=noticeKey(venue.slug);
-  const current=await bucket.get(key);
-  const state=current && await current.json();
-  if (state?.status==='sent') return 'sent';
-  if (state?.status==='sending' && state.until>Date.now()) return 'sending';
-  const onlyIf=current ? {etagMatches:current.etag} : {etagDoesNotMatch:'*'};
-  const claim=await bucket.put(key,JSON.stringify({status:'sending',until:Date.now()+30000}),{onlyIf});
-  if (!claim) return 'sending';
-  let status='failed';
-  try {
-    const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      signal:AbortSignal.timeout(8000),
-      body:JSON.stringify({
-        chat_id:env.TELEGRAM_ADMIN_CHAT_ID,
-        text:registrationMessage(venue)
-      })
-    });
-    if (response.ok && (await response.json()).ok) status='sent';
-  } catch {
-    // The registration stays saved when Telegram is unavailable.
+
+  if (body.action==='ack') {
+    if (!slugValid(body.slug ?? '') || !['sent','failed'].includes(body.status)) return error('Некорректный запрос.');
+    const id=noticeKey(body.slug);
+    const stored=await bucket.get(id);
+    const state=stored && await stored.json();
+    if (!state?.lease || state.lease!==body.lease) return error('Заявка уже обработана.',409);
+    if (state.status===body.status) return json({status:state.status});
+    if (state.status!=='sending') return error('Заявка уже обработана.',409);
+    const result=await bucket.put(id,JSON.stringify({
+      status:body.status,lease:body.lease,until:Date.now()+60000
+    }),{onlyIf:{etagMatches:stored.etag}});
+    return result ? json({status:body.status}) : error('Заявка уже обработана.',409);
   }
-  await bucket.put(key,JSON.stringify({status}),{onlyIf:{etagMatches:claim.etag}});
-  return status;
+
+  if (body.action!=='poll' || (body.cursor!=null && typeof body.cursor!=='string')) return error('Некорректный запрос.');
+  const page=await bucket.list({prefix:'restaurant/',limit:16,cursor:body.cursor ?? undefined});
+  for (const {key:recordKey} of page.objects) {
+    const venue=await read(bucket,recordKey);
+    if (!venue?.registeredBy) continue;
+    const id=noticeKey(venue.slug);
+    const stored=await bucket.get(id);
+    const state=stored && await stored.json();
+    if (state?.status==='sent' || state?.until>Date.now()) continue;
+    const lease=random();
+    const onlyIf=stored ? {etagMatches:stored.etag} : {etagDoesNotMatch:'*'};
+    const claimed=await bucket.put(id,JSON.stringify({status:'sending',lease,until:Date.now()+120000}),{onlyIf});
+    if (claimed) return json({notice:{slug:venue.slug,lease,chatId,text:registrationMessage(venue)},cursor:body.cursor ?? null});
+  }
+  return json({notice:null,cursor:page.truncated ? page.cursor : null});
 }
 
 async function billing(request,bucket,slug,month) {
@@ -155,6 +176,7 @@ async function api(request, url, env, sample) {
   const parts = url.pathname.split('/').slice(2);
   const [route, slug, action, id] = parts;
   const method = request.method;
+  if (url.pathname==='/api/registration-bot') return registrationBot(request,env);
   const isSample=slug===sample.slug;
   const venueSample=isSample ? sample : null;
   const validVenue=isSample || slugValid(slug ?? '');
@@ -206,7 +228,6 @@ async function api(request, url, env, sample) {
     const venue={name,slug,admins:[email],enabled:false,registeredBy:email,registrationContact};
     const created=await bucket.put('restaurant/'+slug,JSON.stringify(venue),{onlyIf:{etagDoesNotMatch:'*'}});
     if (!created) return error('Этот адрес уже занят.',409);
-    await sendRegistrationNotice(env,venue).catch(()=>{});
     return json({restaurant:{name,slug,enabled:false}},201);
   }
   if (route==='billing' && validVenue) {
@@ -227,7 +248,16 @@ async function api(request, url, env, sample) {
       const venue=await current.json();
       if (body.action==='notify') {
         if (!venue.registeredBy) return error('Этот ресторан создан вручную.',400);
-        return json({status:await sendRegistrationNotice(env,venue)});
+        const notice=await bucket.get(noticeKey(venue.slug));
+        const state=notice && await notice.json();
+        if (state?.status==='sent') return json({status:'sent'});
+        if (state?.status==='sending' && state.until>Date.now()) return json({status:'sending'});
+        if (state) {
+          const updated=await bucket.put(noticeKey(venue.slug),JSON.stringify({status:'pending'}),
+            {onlyIf:{etagMatches:notice.etag}});
+          if (!updated) return error('Статус уведомления изменился. Проверьте его ещё раз.',409);
+        }
+        return json({status:env.REGISTRATION_BOT_PUBLIC_KEY ? 'queued' : 'pending'});
       }
       if (typeof body.enabled!=='boolean') return error('Укажите состояние ресторана.');
       const updated=await bucket.put(key,JSON.stringify({...venue,enabled:body.enabled}),{onlyIf:{etagMatches:current.etag}});
