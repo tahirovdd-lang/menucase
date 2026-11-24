@@ -14,11 +14,10 @@ const hash = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-2
 const sessionKey = async token => 'session/' + await hash(token);
 const idValid = value => /^[a-f0-9-]{36}$/.test(value);
 
-async function createRestaurant(bucket,reservedSlug,baseSlug,details) {
+async function createRestaurant(bucket,baseSlug,details) {
   for (let number=1;number<=100;number++) {
     const suffix=number===1 ? '' : '-'+number;
     const slug=suffix ? baseSlug.slice(0,48-suffix.length).replace(/-+$/,'')+suffix : baseSlug;
-    if (slug===reservedSlug) continue;
     const venue={...details,slug};
     const created=await bucket.put('restaurant/'+slug,JSON.stringify(venue),{onlyIf:{etagDoesNotMatch:'*'}});
     if (created) return venue;
@@ -85,19 +84,12 @@ async function photoInfo(file) {
   return '';
 }
 
-async function menuItems(bucket,prefix,sample) {
-  const saved=await all(bucket,prefix);
-  if (!sample) return saved.sort((a,b)=>a.created-b.created);
-  const combined=new Map(sample.entries);
-  for (const item of saved) {
-    if (item.deleted) combined.delete(item.id);
-    else combined.set(item.id,item);
-  }
-  return [...combined.values()].sort((a,b)=>a.created-b.created);
+async function menuItems(bucket,prefix) {
+  return (await all(bucket,prefix)).sort((a,b)=>a.created-b.created);
 }
 
-function menuLogo(slug,uploaded,sample) {
-  return uploaded ? '/api/restaurants/'+slug+'/logo' : (sample ? '/the-mohon-logo.webp' : '');
+function menuLogo(slug,uploaded) {
+  return uploaded ? '/api/restaurants/'+slug+'/logo' : '';
 }
 
 const monthValid = value => typeof value==='string' && /^[1-9][0-9]{3}-(0[1-9]|1[0-2])$/.test(value);
@@ -246,20 +238,18 @@ async function billing(request,bucket,slug,month) {
   return result ? json({days:paid,revision:result.etag}) : error('Календарь уже изменился. Откройте его заново.',409);
 }
 
-async function api(request, url, env, sample) {
+async function api(request, url, env, sections) {
   const bucket = env.BUCKET;
   const parts = url.pathname.split('/').slice(2);
   const [route, slug, action, id] = parts;
   const method = request.method;
   if (url.pathname==='/api/registration-bot') return registrationBot(request,env);
-  const isSample=slug===sample.slug;
-  const venueSample=isSample ? sample : null;
-  const validVenue=isSample || slugValid(slug ?? '');
+  const validVenue=slugValid(slug ?? '');
   const prefix='item/'+slug+'/';
   if (method !== 'GET' && request.headers.get('Origin') !== url.origin) return error('Запрос отклонён.',403);
   if (route==='telegram-login') return telegramLogin(request,url,env,slug);
-  if (route === 'restaurants' && method === 'GET' && validVenue) {
-    const restaurant = venueSample ?? await read(bucket,'restaurant/'+slug);
+  if (route === 'restaurants' && method === 'GET') {
+    const restaurant = validVenue && await read(bucket,'restaurant/'+slug);
     if (!restaurant || restaurant.enabled===false) return error('Меню ресторана временно недоступно.',404);
     if (action === 'logo') {
       const object = await bucket.get('logo/'+slug);
@@ -269,9 +259,9 @@ async function api(request, url, env, sample) {
       const object = await bucket.get('photo/'+slug+'/'+id);
       return object ? new Response(object.body,{headers:{'Content-Type':object.httpMetadata.contentType,'Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'}}) : error('Фото не найдено.',404);
     }
-    const items = await menuItems(bucket,prefix,venueSample);
+    const items = await menuItems(bucket,prefix);
     const logo = await (bucket.head ? bucket.head('logo/'+slug) : bucket.get('logo/'+slug));
-    return json({restaurant:{name:restaurant.name,slug,logo:menuLogo(slug,logo,venueSample)},items});
+    return json({restaurant:{name:restaurant.name,slug,logo:menuLogo(slug,logo)},items});
   }
   const token = cookieValue(request,'menu_session');
   const session = token && /^[a-f0-9]{64}$/.test(token) && await read(bucket,await sessionKey(token));
@@ -290,7 +280,6 @@ async function api(request, url, env, sample) {
   if (route === 'me' && method === 'GET') {
     const signed = Boolean(identity);
     const restaurants = signed ? (await all(bucket,'restaurant/')).filter(r=>owner || r.admins.includes(identity)) : [];
-    if (owner) restaurants.unshift({name:sample.name,slug:sample.slug,sample:true});
     return json({email,verifiedEmail:email ? (active.address || email) : '',telegramId,telegramConfigured:telegramLoginConfigured(env),owner,configured:googleConfigured(env),restaurants:restaurants.map(r=>owner?r:{name:r.name,slug:r.slug,enabled:r.enabled!==false})});
   }
   if (!identity) return error('Войдите через Google или Telegram.',401);
@@ -309,14 +298,14 @@ async function api(request, url, env, sample) {
     const contactEmail=email ? (active.address || email) : gmail(body.email) && body.email.trim().toLowerCase();
     if (!contactEmail) return error('Укажите контактный адрес @gmail.com.');
     const registrationContact={firstName,lastName,phone,email:contactEmail};
-    const venue=await createRestaurant(bucket,sample.slug,slug,{name,admins:[identity],enabled:false,registeredBy:identity,registrationContact});
+    const venue=await createRestaurant(bucket,slug,{name,admins:[identity],enabled:false,registeredBy:identity,registrationContact});
     if (!venue) return error('Не удалось подобрать адрес. Уточните название ресторана.',409);
     return json({restaurant:{name,slug:venue.slug,enabled:false}},201);
   }
   if (route==='billing' && validVenue) {
     if (!owner && method!=='GET') return error('Отмечать оплату может только системный администратор.',403);
-    const venue=venueSample ?? await read(bucket,'restaurant/'+slug);
-    if (!owner && (isSample || !venue?.admins.includes(identity))) return error('Нет доступа к этому ресторану.',403);
+    const venue=await read(bucket,'restaurant/'+slug);
+    if (!owner && !venue?.admins.includes(identity)) return error('Нет доступа к этому ресторану.',403);
     if (!venue) return error('Ресторан не найден.',404);
     return billing(request,bucket,slug,action);
   }
@@ -351,7 +340,7 @@ async function api(request, url, env, sample) {
     if (body.action === 'create') {
       const name = String(body.name ?? '').trim();
       if (!name || name.length > 100) return error('Укажите название до 100 символов.');
-      const venue=await createRestaurant(bucket,sample.slug,body.slug,{name,admins:[admin]});
+      const venue=await createRestaurant(bucket,body.slug,{name,admins:[admin]});
       return venue ? json({ok:true,restaurant:{name,slug:venue.slug}},201) : error('Не удалось подобрать адрес. Уточните название ресторана.',409);
     }
     if (!['grant','revoke'].includes(body.action)) return error('Неизвестное действие.');
@@ -363,8 +352,8 @@ async function api(request, url, env, sample) {
     return updated ? json({ok:true}) : error('Доступы уже изменились. Повторите действие.',409);
   }
   if (route !== 'manage' || !validVenue) return error('Страница не найдена.',404);
-  const venue = venueSample ?? await read(bucket,'restaurant/'+slug);
-  if (!venue || (!owner && (isSample || !venue.admins.includes(identity)))) return error('Нет доступа к этому ресторану.',403);
+  const venue = await read(bucket,'restaurant/'+slug);
+  if (!venue || (!owner && !venue.admins.includes(identity))) return error('Нет доступа к этому ресторану.',403);
   if (method==='GET' && (action==='logo' || action==='photo' && idValid(id ?? ''))) {
     const asset=await bucket.get(action==='logo' ? 'logo/'+slug : 'photo/'+slug+'/'+id);
     return asset ? new Response(asset.body,{headers:{'Content-Type':asset.httpMetadata.contentType,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}}) : error('Изображение не найдено.',404);
@@ -387,19 +376,19 @@ async function api(request, url, env, sample) {
   if (method === 'GET') {
     if (action==='appearance') {
       const logo=await (bucket.head ? bucket.head('logo/'+slug) : bucket.get('logo/'+slug));
-      return json({restaurant:{logo:menuLogo(slug,logo,venueSample)}});
+      return json({restaurant:{logo:menuLogo(slug,logo)}});
     }
-    return json({items:await menuItems(bucket,prefix,venueSample)});
+    return json({items:await menuItems(bucket,prefix)});
   }
-  const existingId=idValid(action ?? '') || (isSample && sample.entries.has(action));
+  const existingId=idValid(action ?? '');
   if (method === 'POST' && (action === 'new' || existingId)) {
     if (Number(request.headers.get('Content-Length')) > 4400000) return error('Фото должно весить до 4 МБ.',413);
     const form = await request.formData();
     const name = String(form.get('name') ?? '').trim();
     const description = String(form.get('description') ?? '').trim();
     const category = form.get('category');
-    const section = isSample && category==='food' ? form.get('section') : '';
-    if (isSample && category==='food' && !sample.sections.has(section)) return error('Выберите подкатегорию блюда.');
+    const section = category==='food' ? form.get('section') : '';
+    if (section && !sections.has(section)) return error('Выберите подкатегорию блюда.');
     const price = String(form.get('price') ?? '').trim();
     const markers = JSON.parse(String(form.get('markers') ?? '[]'));
     if (!Array.isArray(markers) || markers.length > 12 || markers.some(marker =>
@@ -411,8 +400,8 @@ async function api(request, url, env, sample) {
     const itemId = action === 'new' ? crypto.randomUUID() : action;
     const key=prefix+itemId;
     const stored=action==='new' ? null : await bucket.get(key);
-    const previous=stored ? await stored.json() : venueSample?.entries.get(itemId);
-    if (action !== 'new' && (!previous || previous.deleted)) return error('Позиция не найдена.',404);
+    const previous=stored ? await stored.json() : null;
+    if (action !== 'new' && !previous) return error('Позиция не найдена.',404);
     const nutrition={...previous?.nutrition};
     for (const [nutrient,limit] of Object.entries({calories:1000,protein:100,fat:100,carbs:100})) {
       const raw=form.get('nutrition-'+nutrient);
@@ -440,17 +429,9 @@ async function api(request, url, env, sample) {
     }
     const item = {id:itemId,name,description,category,price,markers,photoId,created:previous?.created ?? Date.now(),photo:photoId ? '/api/restaurants/'+slug+'/photo/'+photoId : (previous?.photo ?? '')};
     if (Object.keys(nutrition).length) item.nutrition=nutrition;
-    if (isSample) {
-      item.section=section;
-      item.illustration=Boolean(!photoId && previous?.illustration);
-    }
+    if (section) item.section=section;
     try {
-      const options=isSample ? {onlyIf:stored ? {etagMatches:stored.etag} : {etagDoesNotMatch:'*'}} : undefined;
-      const result=await bucket.put(key,JSON.stringify(item),options);
-      if (!result && isSample) {
-        if (photoId && photoId !== previous?.photoId) await bucket.delete('photo/'+slug+'/'+photoId);
-        return error('Позиция уже изменилась. Обновите страницу и повторите действие.',409);
-      }
+      await bucket.put(key,JSON.stringify(item));
     } catch (issue) {
       if (photoId && photoId !== previous?.photoId) await bucket.delete('photo/'+slug+'/'+photoId);
       throw issue;
@@ -461,32 +442,22 @@ async function api(request, url, env, sample) {
   if (method === 'DELETE' && existingId) {
     const key=prefix+action;
     const stored=await bucket.get(key);
-    const item=stored ? await stored.json() : venueSample?.entries.get(action);
-    if (isSample) {
-      if (!item || item.deleted) return json({ok:true});
-      const onlyIf=stored ? {etagMatches:stored.etag} : {etagDoesNotMatch:'*'};
-      const result=await bucket.put(key,JSON.stringify({id:action,deleted:true}),{onlyIf});
-      if (!result) return error('Позиция уже изменилась. Обновите страницу и повторите действие.',409);
-    } else await bucket.delete(key);
+    const item=stored ? await stored.json() : null;
+    await bucket.delete(key);
     if (item?.photoId) await bucket.delete('photo/'+slug+'/'+item.photoId);
     return json({ok:true});
   }
   return error('Действие не поддерживается.',405);
 }
 
-export function app(assets,menu) {
-  const sample={
-    slug:menu.slug,
-    name:menu.name,
-    sections:new Set(menu.sections.map(section=>section.id)),
-    entries:new Map(menu.items.map((item,created)=>[item.id,{...item,created}]))
-  };
+export function app(assets,sectionIds) {
+  const sections=new Set(sectionIds);
   return {async fetch(request,env) {
     const url = new URL(request.url);
     try {
-      if (url.pathname.startsWith('/api/')) return await api(request,url,env,sample);
+      if (url.pathname.startsWith('/api/')) return await api(request,url,env,sections);
       if (request.method === 'GET' && ['/auth/google','/auth/google/callback'].includes(url.pathname)) return await google(request,url,env);
-      const menuPage = /^\/r\/[a-z0-9-]+(?:\/dish\/[a-f0-9-]+)?\/?$|^\/dish\/[a-z0-9-]+\/?$/;
+      const menuPage = /^\/r\/[a-z0-9-]+(?:\/dish\/[a-f0-9-]+)?\/?$/;
       const key = ['/', '/admin', '/admin/'].includes(url.pathname) || menuPage.test(url.pathname) ? '/index.html' : url.pathname;
       if (!Object.hasOwn(assets,key)) return new Response('Страница не найдена.',{status:404});
       const asset = assets[key];
