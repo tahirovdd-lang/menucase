@@ -114,6 +114,10 @@ form{display:grid;gap:12px;margin:1rem 0}label{display:grid;gap:.35rem;color:var
 .admin-muted{color:var(--muted)}
 .admin-toolbar select{width:min(100%,235px)}
 .admin-items{list-style:none;padding:0;margin:1rem 0 0;display:grid;gap:.55rem}
+.admin-menu-qr{display:flex;align-items:center;flex-wrap:wrap;gap:1rem;margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid #ffffff28}
+.admin-menu-qr img{display:block;width:min(100%,168px);height:auto;image-rendering:pixelated}
+.admin-menu-qr-copy{display:grid;gap:.6rem;justify-items:start;min-width:0;overflow-wrap:anywhere}
+.admin-menu-qr-copy :is(h3,p){margin:0}
 .admin-item{display:grid;grid-template-columns:60px minmax(0,1fr) auto auto;gap:clamp(.55rem,1.5vw,1rem);align-items:center;padding:.6rem;border-radius:14px;background:#1b1d17;border:1px solid #ffffff20}
 .admin-item-copy{display:grid;gap:.2rem;overflow-wrap:anywhere}
 .admin-item-copy span{font-size:.875rem}
